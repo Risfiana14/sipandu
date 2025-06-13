@@ -1,0 +1,27 @@
+name: sipandu
+description: Aplikasi pelaporan masyarakat
+
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  image_picker: ^0.8.4+4
+  shared_preferences: ^2.0.13
+  geolocator: ^8.0.1
+  geocoding: ^2.0.4
+  http: ^0.13.6
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^1.0.0
+
+flutter:
+  uses-material-design: true
