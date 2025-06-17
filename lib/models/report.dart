@@ -1,4 +1,5 @@
-import 'dart:convert';
+// lib/models/report.dart
+import 'package:latlong2/latlong.dart';
 
 enum ReportStatus {
   pending,
@@ -11,134 +12,113 @@ class Report {
   final String id;
   final String userId;
   final String title;
-  final String description;
   final String category;
-  final List<String> images;
-  final double latitude;
-  final double longitude;
-  final String address;
-  final DateTime createdAt;
-  final ReportStatus status;
+  final String description;
+  final List<String> images; // List of FULL URLs
+  final LatLng location;
+  ReportStatus status; // <--- UBAH INI: Hapus 'final'
+  final String created;
+  final String updated;
   final String? response;
 
   Report({
     required this.id,
     required this.userId,
     required this.title,
-    required this.description,
     required this.category,
+    required this.description,
     required this.images,
-    required this.latitude,
-    required this.longitude,
-    required this.address,
-    required this.createdAt,
+    required this.location,
     required this.status,
+    required this.created,
+    required this.updated,
     this.response,
   });
 
-  factory Report.fromJson(Map<String, dynamic> json) {
-    List<String> parseImages(dynamic imagesData) {
-      if (imagesData == null) return [];
-
-      if (imagesData is List) {
-        return imagesData.map((e) => e.toString()).toList();
-      }
-
-      if (imagesData is String) {
-        try {
-          final decoded = jsonDecode(imagesData);
-          if (decoded is List) {
-            return decoded.map((e) => e.toString()).toList();
-          }
-        } catch (_) {}
-      }
-
-      return [];
-    }
-
+  // Tambahkan fungsi copyWith untuk kemudahan membuat instance baru dengan perubahan
+  Report copyWith({
+    String? id,
+    String? userId,
+    String? title,
+    String? category,
+    String? description,
+    List<String>? images,
+    LatLng? location,
+    ReportStatus? status,
+    String? created,
+    String? updated,
+    String? response,
+  }) {
     return Report(
-      id: json['id'] ?? '',
-      userId: json['user_id'] ?? json['userId'] ?? '',
-      title: json['title'] ?? '',
-      description: json['description'] ?? '',
-      category: json['category'] ?? '',
-      images: parseImages(json['images']),
-      latitude: (json['latitude'] ?? 0.0).toDouble(),
-      longitude: (json['longitude'] ?? 0.0).toDouble(),
-      address: json['address'] ?? '',
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'])
-          : (json['createdAt'] != null
-              ? DateTime.parse(json['createdAt'])
-              : DateTime.now()),
-      status: _parseStatus(json['status']),
-      response: json['response'],
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      title: title ?? this.title,
+      category: category ?? this.category,
+      description: description ?? this.description,
+      images: images ?? this.images,
+      location: location ?? this.location,
+      status: status ?? this.status,
+      created: created ?? this.created,
+      updated: updated ?? this.updated,
+      response: response ?? this.response,
     );
   }
 
-  static ReportStatus _parseStatus(dynamic status) {
-    if (status == null) return ReportStatus.pending;
-
-    if (status is int && status >= 0 && status < ReportStatus.values.length) {
-      return ReportStatus.values[status];
+  factory Report.fromJson(Map<String, dynamic> json) {
+    LatLng parsedLocation;
+    if (json['lokasi'] != null &&
+        json['lokasi'] is Map &&
+        json['lokasi']['latitude'] != null &&
+        json['lokasi']['longitude'] != null) {
+      parsedLocation = LatLng(
+        (json['lokasi']['latitude'] as num).toDouble(), // Pastikan double
+        (json['lokasi']['longitude'] as num).toDouble(), // Pastikan double
+      );
+    } else {
+      print(
+          'Warning: Lokasi tidak valid atau tidak ditemukan. Menggunakan 0,0. Data mentah: ${json['lokasi']}');
+      parsedLocation = LatLng(0.0, 0.0);
     }
 
-    if (status is String) {
-      try {
-        return ReportStatus.values.firstWhere(
-          (e) =>
-              e.toString().split('.').last.toLowerCase() ==
-              status.toLowerCase(),
-          orElse: () => ReportStatus.pending,
-        );
-      } catch (_) {}
+    return Report(
+      id: json['id'] as String,
+      userId: json['user_id'] as String,
+      title: json['judul'] as String,
+      category: json['kategori'] as String,
+      description: json['deskripsi'] as String,
+      images: (json['gambar'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
+      location: parsedLocation,
+      status: _parseReportStatus(json['status'] as String),
+      created: json['created'] as String,
+      updated: json['updated'] as String,
+      response: json['tanggapan'] as String?,
+    );
+  }
+
+  static ReportStatus _parseReportStatus(String statusString) {
+    switch (statusString.toLowerCase()) {
+      case 'menunggu':
+        return ReportStatus.pending;
+      case 'diproses':
+        return ReportStatus.inProcess;
+      case 'selesai':
+        return ReportStatus.resolved;
+      case 'ditolak':
+        return ReportStatus.rejected;
+      default:
+        return ReportStatus.pending;
     }
-
-    return ReportStatus.pending;
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'user_id': userId,
-      'title': title,
-      'description': description,
-      'category': category,
-      'images': images,
-      'latitude': latitude,
-      'longitude': longitude,
-      'address': address,
-      'created_at': createdAt.toIso8601String(),
-      'status': status.index,
-      'response': response,
-    };
-  }
-
-  // Implementasi manual format tanggal tanpa menggunakan package intl
   String get formattedDate {
-    final day = createdAt.day.toString().padLeft(2, '0');
+    final dateTime = DateTime.parse(created).toLocal();
+    return "${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute}";
+  }
 
-    // Daftar nama bulan dalam bahasa Indonesia
-    final months = [
-      'Januari',
-      'Februari',
-      'Maret',
-      'April',
-      'Mei',
-      'Juni',
-      'Juli',
-      'Agustus',
-      'September',
-      'Oktober',
-      'November',
-      'Desember'
-    ];
-    final month = months[createdAt.month - 1];
-
-    final year = createdAt.year;
-    final hour = createdAt.hour.toString().padLeft(2, '0');
-    final minute = createdAt.minute.toString().padLeft(2, '0');
-
-    return '$day $month $year, $hour:$minute';
+  String get address {
+    return 'Lat: ${location.latitude.toStringAsFixed(4)}, Lon: ${location.longitude.toStringAsFixed(4)}';
   }
 }

@@ -1,68 +1,112 @@
+// lib/screens/login_screen.dart
 import 'package:flutter/material.dart';
-import 'package:sipandu/services/auth_service.dart';
+import 'package:pocketbase/pocketbase.dart';
 import 'package:sipandu/screens/home_screen.dart';
+import 'package:sipandu/screens/dashboard_admin_screen.dart';
+import 'package:sipandu/services/pocketbase_client.dart';
 import 'package:sipandu/screens/register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  final bool? fromRegister;
-
-  const LoginScreen({Key? key, this.fromRegister}) : super(key: key);
+  // Make fromRegister optional with a default value
+  final bool fromRegister;
+  const LoginScreen({super.key, this.fromRegister = false});
 
   @override
-  _LoginScreenState createState() => _LoginScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final emailController = TextEditingController();
-  final passwordController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final PocketBase _pb = PocketBaseClient.instance;
   bool _isLoading = false;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    // Show success message if coming from registration
-    if (widget.fromRegister == true) {
+    // If we came from registration, show a success message
+    if (widget.fromRegister) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Registration successful! Please login.'),
+            content: Text('Registrasi berhasil! Silakan login.'),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
           ),
         );
       });
     }
   }
 
-  Future<void> login() async {
-    if (!_formKey.currentState!.validate()) return;
-
+  Future<void> _login() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final result = await AuthService.login(
-        email: emailController.text.trim(),
-        password: passwordController.text,
-      );
+      final authData = await _pb.collection('users').authWithPassword(
+            _emailController.text,
+            _passwordController.text,
+          );
 
-      if (result['success']) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
+      final RecordModel? userRecord = _pb.authStore.model;
+
+      if (userRecord != null && userRecord.data['role'] != null) {
+        final userRole = userRecord.data['role'] as String;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Login berhasil sebagai $userRole')),
         );
+
+        if (userRole == 'admin') {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => const DashboardAdminScreen(),
+            ),
+          );
+        } else if (userRole == 'user') {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => HomeScreen(userData: userRecord.data),
+            ),
+          );
+        } else {
+          setState(() {
+            _errorMessage =
+                'Peran pengguna tidak dikenal. Silakan hubungi administrator.';
+          });
+          _pb.authStore.clear();
+        }
       } else {
         setState(() {
-          _errorMessage = result['message'] ?? 'Login failed';
+          _errorMessage =
+              'Gagal mendapatkan data peran pengguna. Silakan coba lagi.';
         });
+        _pb.authStore.clear();
       }
+    } on ClientException catch (e) {
+      String message = 'Terjadi kesalahan saat login.';
+      if (e.response.containsKey('message')) {
+        message = e.response['message'] as String;
+      } else if (e.response.containsKey('data') && e.response['data'] is Map) {
+        final data = e.response['data'] as Map<String, dynamic>;
+        if (data.containsKey('identity') && data['identity'] is Map) {
+          message = data['identity']['message'] as String? ?? message;
+        } else if (data.containsKey('password') && data['password'] is Map) {
+          message = data['password']['message'] as String? ?? message;
+        }
+      }
+      setState(() {
+        _errorMessage = message;
+      });
+      print(
+          'Login error (ClientException): ${e.response}'); // Consider using a proper logger
     } catch (e) {
       setState(() {
-        _errorMessage = 'Error: $e';
+        _errorMessage = 'Terjadi kesalahan tidak terduga: $e';
       });
+      print('Unexpected login error: $e'); // Consider using a proper logger
     } finally {
       setState(() {
         _isLoading = false;
@@ -71,190 +115,119 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        children: [
-          // Header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 60, 20, 30),
-            decoration: const BoxDecoration(
-              color: Colors.blue,
-            ),
-            child: const Column(
-              children: [
-                Text(
-                  'WELCOME SIPANDU',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Aplikasi Sistem Pelayanan Terpadu',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Form
-          Expanded(
-            child: SingleChildScrollView(
-              child: Container(
-                color: Colors.white,
-                padding: const EdgeInsets.all(20),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      // Login Icon and Title
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 20),
-                        child: Column(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: const BoxDecoration(
-                                color: Colors.black,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'LOGIN',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const Divider(),
-                      const SizedBox(height: 20),
-
-                      // Error message
-                      if (_errorMessage != null)
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          margin: const EdgeInsets.only(bottom: 20),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade100,
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(color: Colors.red.shade300),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.error_outline,
-                                  color: Colors.red),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  _errorMessage!,
-                                  style: const TextStyle(color: Colors.red),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                      // Email Field
-                      TextFormField(
-                        controller: emailController,
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          filled: true,
-                          fillColor: Color(0xFFE3F2FD),
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Email is required';
-                          }
-                          if (!value.contains('@')) {
-                            return 'Enter a valid email';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Password Field
-                      TextFormField(
-                        controller: passwordController,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Password',
-                          filled: true,
-                          fillColor: Color(0xFFE3F2FD),
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Password is required';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Login Button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : login,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: _isLoading
-                              ? const CircularProgressIndicator(
-                                  color: Colors.white)
-                              : const Text(
-                                  'LOGIN',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Register Link
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => RegisterScreen(),
-                            ),
-                          );
-                        },
-                        child: const Text("Don't have an account? Register"),
-                      ),
-                    ],
-                  ),
+      appBar: AppBar(
+        title: const Text('Login'),
+        backgroundColor: Theme.of(context).primaryColor,
+        foregroundColor: Colors.white,
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.supervised_user_circle,
+                size: 100,
+                color: Theme.of(context).primaryColor,
+              ),
+              const SizedBox(height: 32),
+              Text(
+                'Selamat Datang Kembali!',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).primaryColor,
                 ),
               ),
-            ),
+              const SizedBox(height: 8),
+              const Text(
+                'Silakan login untuk melanjutkan',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+              const SizedBox(height: 32),
+              TextField(
+                controller: _emailController,
+                decoration: InputDecoration(
+                  labelText: 'Email',
+                  prefixIcon: const Icon(Icons.email),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _passwordController,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  prefixIcon: const Icon(Icons.lock),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                obscureText: true,
+              ),
+              const SizedBox(height: 24),
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.red, fontSize: 14),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _login,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        )
+                      : const Text(
+                          'Login',
+                          style: TextStyle(fontSize: 18),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            const RegisterScreen()), // Menggunakan RegisterScreen
+                  );
+                },
+                child: Text(
+                  'Belum punya akun? Daftar di sini',
+                  style: TextStyle(color: Theme.of(context).primaryColor),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

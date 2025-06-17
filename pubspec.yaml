@@ -16,7 +16,12 @@ dependencies:
   geolocator: ^8.0.1
   geocoding: ^2.0.4
   http: ^0.13.6
-
+  pocketbase: ^0.9.1
+  dio: ^5.0.0
+  image_picker_web: ^4.0.0
+  mime: ^1.0.6
+  flutter_map: ^4.0.0
+  latlong2: ^0.8.2
 
 dev_dependencies:
   flutter_test:

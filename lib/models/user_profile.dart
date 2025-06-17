@@ -1,78 +1,48 @@
 class UserProfile {
-  final String id;
-  final String email;
-  final String name;
-  final String? phone;
-  final String? avatarUrl;
   final String? address;
-  final String? dateOfBirth;
-  final String? gender;
-  final DateTime createdAt;
-  final DateTime? updatedAt;
+  final String? avatar;
+  final String? email;
+  final bool emailVisibility;
+  final String? name;
+  final int? phone;
+  final bool verified;
+  final String id;
+  final DateTime? created; // Changed to nullable
+  final DateTime? updated; // Changed to nullable
 
   UserProfile({
-    required this.id,
-    required this.email,
-    required this.name,
-    this.phone,
-    this.avatarUrl,
     this.address,
-    this.dateOfBirth,
-    this.gender,
-    required this.createdAt,
-    this.updatedAt,
+    this.avatar,
+    this.email,
+    required this.emailVisibility,
+    this.name,
+    this.phone,
+    required this.verified,
+    required this.id,
+    this.created,
+    this.updated,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
-      id: json['id'].toString(),
-      email: json['email'] ?? '',
-      name: json['name'] ?? '',
-      phone: json['phone'],
-      avatarUrl: json['avatar_url'],
-      address: json['address'],
-      dateOfBirth: json['date_of_birth'],
-      gender: json['gender'],
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'])
+      address: json['address'] as String?,
+      avatar: json['avatar'] as String?,
+      email: json['email'] as String?,
+      emailVisibility: json['emailVisibility'] as bool? ?? false,
+      name: json['name'] as String?,
+      phone: json['phone'] as int?,
+      verified: json['verified'] as bool? ?? false,
+      id: json['id'] as String,
+      created: json['created'] != null
+          ? DateTime.parse(json['created'] as String)
+          : null,
+      updated: json['updated'] != null
+          ? DateTime.parse(json['updated'] as String)
           : null,
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'email': email,
-      'name': name,
-      'phone': phone,
-      'avatar_url': avatarUrl,
-      'address': address,
-      'date_of_birth': dateOfBirth,
-      'gender': gender,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt?.toIso8601String(),
-    };
-  }
-
-  String get formattedJoinDate {
-    final day = createdAt.day.toString().padLeft(2, '0');
-    final months = [
-      'Januari',
-      'Februari',
-      'Maret',
-      'April',
-      'Mei',
-      'Juni',
-      'Juli',
-      'Agustus',
-      'September',
-      'Oktober',
-      'November',
-      'Desember'
-    ];
-    final month = months[createdAt.month - 1];
-    final year = createdAt.year;
-    return '$day $month $year';
+  String getPhoneAsString() {
+    return phone?.toString() ?? 'Belum diatur';
   }
 }

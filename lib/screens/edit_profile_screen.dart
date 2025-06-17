@@ -1,95 +1,129 @@
+import 'dart:io';
+import 'dart:convert'; // Impor untuk jsonDecode
 import 'package:flutter/material.dart';
-import 'package:sipandu/models/user_profile.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:pocketbase/pocketbase.dart';
+import 'package:http/http.dart' as http;
+import 'package:sipandu/services/pocketbase_client.dart';
+
+const String pocketBaseUrl = 'http://127.0.0.1:8090';
 
 class EditProfileScreen extends StatefulWidget {
-  final UserProfile userProfile;
-  final Function(UserProfile) onProfileUpdated;
+  final Map<String, dynamic> userData;
+  final Function(Map<String, dynamic>) onProfileUpdated;
 
   const EditProfileScreen({
     Key? key,
-    required this.userProfile,
+    required this.userData,
     required this.onProfileUpdated,
   }) : super(key: key);
 
   @override
-  State<EditProfileScreen> createState() => _EditProfileScreenState();
+  _EditProfileScreenState createState() => _EditProfileScreenState();
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  late TextEditingController _nameController;
-  late TextEditingController _emailController;
-  late TextEditingController _phoneController;
-  late TextEditingController _addressController;
+  late TextEditingController nameController;
+  late TextEditingController phoneController;
+  late TextEditingController addressController;
+  File? _selectedImage;
   bool _isLoading = false;
+  String? _errorMessage;
+  final _formKey = GlobalKey<FormState>();
+  final PocketBase _pb = PocketBaseClient.instance;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.userProfile.name);
-    _emailController = TextEditingController(text: widget.userProfile.email);
-    _phoneController = TextEditingController(text: widget.userProfile.phone ?? '');
-    _addressController = TextEditingController(text: widget.userProfile.address ?? '');
+    nameController = TextEditingController(text: widget.userData['name'] ?? '');
+    phoneController = TextEditingController(
+        text: (widget.userData['phone'] ?? '').toString());
+    addressController =
+        TextEditingController(text: widget.userData['address'] ?? '');
   }
 
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _addressController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _saveProfile() async {
-    if (_nameController.text.isEmpty || _emailController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nama dan email harus diisi')),
-      );
-      return;
+  Future<void> _pickImage() async {
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() {
+        _selectedImage = File(pickedFile.path);
+      });
     }
+  }
+
+  Future<void> _updateProfile() async {
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
-      // Create updated profile
-      final updatedProfile = UserProfile(
-        id: widget.userProfile.id,
-        email: _emailController.text.trim(),
-        name: _nameController.text.trim(),
-        phone: _phoneController.text.isEmpty ? null : _phoneController.text.trim(),
-        address: _addressController.text.isEmpty ? null : _addressController.text.trim(),
-        avatarUrl: widget.userProfile.avatarUrl,
-        createdAt: widget.userProfile.createdAt,
-      );
+      final userId = widget.userData['id'] as String? ?? _pb.authStore.model.id;
+      if (userId.isEmpty) {
+        throw Exception('User ID is missing');
+      }
 
-      // Here you would typically save to your backend/database
-      // For example:
-      // await yourApiService.updateProfile(updatedProfile);
-      
-      // Call the callback to update the profile in the parent widget
-      widget.onProfileUpdated(updatedProfile);
-      
-      // Show success message
-      if (mounted) {
+      final updatedData = {
+        'name': nameController.text.trim(),
+        'phone': int.tryParse(phoneController.text.trim()),
+        'address': addressController.text.trim(),
+      };
+
+      RecordModel? record;
+      if (_selectedImage != null) {
+        final request = http.MultipartRequest('PATCH',
+            Uri.parse('$pocketBaseUrl/api/collections/users/records/$userId'))
+          ..fields.addAll(updatedData
+              .map((key, value) => MapEntry(key, value?.toString() ?? '')))
+          ..files.add(await http.MultipartFile.fromPath(
+              'avatar', _selectedImage!.path));
+
+        // Tambahkan header autentikasi
+        request.headers
+            .addAll({'Authorization': 'Bearer ${_pb.authStore.token}'});
+
+        final response = await request.send();
+        if (response.statusCode == 200) {
+          final responseBody = await http.Response.fromStream(response);
+          final jsonData =
+              jsonDecode(responseBody.body); // Konversi String ke Map
+          record = RecordModel.fromJson(jsonData); // Parsing ke RecordModel
+        } else {
+          throw Exception(
+              'Failed to upload avatar: ${response.statusCode} - ${await response.stream.bytesToString()}');
+        }
+      } else {
+        record =
+            await _pb.collection('users').update(userId, body: updatedData);
+      }
+
+      print('Update response: ${record?.toJson()}'); // Debugging
+
+      if (record != null) {
+        widget.onProfileUpdated(record.toJson());
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profil berhasil diperbarui')),
+          const SnackBar(
+            content: Text('Profile updated successfully'),
+            backgroundColor: Colors.green,
+          ),
         );
         Navigator.pop(context);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal memperbarui profil: ${e.toString()}')),
-        );
-      }
-    } finally {
-      if (mounted) {
+      } else {
         setState(() {
-          _isLoading = false;
+          _errorMessage = 'Failed to update profile: No data returned';
         });
       }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Failed to update profile: $e';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -97,108 +131,151 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit Profil'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: _isLoading ? null : _saveProfile,
-          ),
-        ],
+        title: const Text('Edit Profile'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Profile picture
-                  GestureDetector(
-                    onTap: () {
-                      // Implement image picker functionality here
-                      // This is where you would add code to select a new profile picture
-                    },
-                    child: Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 50,
-                          backgroundImage: widget.userProfile.avatarUrl != null
-                              ? NetworkImage(widget.userProfile.avatarUrl!)
-                              : null,
-                          child: widget.userProfile.avatarUrl == null
-                              ? const Icon(Icons.person, size: 50)
-                              : null,
-                        ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).primaryColor,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.camera_alt,
-                              color: Colors.white,
-                              size: 20,
-                            ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              if (_errorMessage != null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade300),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        color: Colors.red.shade700,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: TextStyle(
+                            color: Colors.red.shade700,
+                            fontSize: 14,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 24),
-                  // Form fields
-                  TextField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nama',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.person),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _emailController,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.email),
-                    ),
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _phoneController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nomor Telepon',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.phone),
-                    ),
-                    keyboardType: TextInputType.phone,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _addressController,
-                    decoration: const InputDecoration(
-                      labelText: 'Alamat',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.home),
-                    ),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _saveProfile,
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(50),
-                    ),
-                    child: Text(_isLoading ? 'Menyimpan...' : 'Simpan Perubahan'),
-                  ),
-                ],
+                ),
+              GestureDetector(
+                onTap: _pickImage,
+                child: CircleAvatar(
+                  radius: 50,
+                  backgroundImage: _selectedImage != null
+                      ? FileImage(_selectedImage!) as ImageProvider
+                      : widget.userData['avatar'] != null
+                          ? NetworkImage(
+                              '$pocketBaseUrl/api/files/users/${widget.userData['id']}/${widget.userData['avatar']}')
+                          : null,
+                  child: _selectedImage == null &&
+                          widget.userData['avatar'] == null
+                      ? const Icon(Icons.person, size: 50)
+                      : null,
+                ),
               ),
-            ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  filled: true,
+                  fillColor: Color(0xFFE3F2FD),
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Username tidak boleh kosong';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: phoneController,
+                decoration: const InputDecoration(
+                  labelText: 'Phone',
+                  filled: true,
+                  fillColor: Color(0xFFE3F2FD),
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.phone),
+                ),
+                keyboardType: TextInputType.phone,
+                validator: (value) {
+                  if (value != null &&
+                      value.isNotEmpty &&
+                      int.tryParse(value) == null) {
+                    return 'Masukkan nomor telepon yang valid';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: addressController,
+                decoration: const InputDecoration(
+                  labelText: 'Address',
+                  filled: true,
+                  fillColor: Color(0xFFE3F2FD),
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.home),
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _updateProfile,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade300,
+                  ),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        )
+                      : const Text(
+                          'Simpan Perubahan',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    phoneController.dispose();
+    addressController.dispose();
+    super.dispose();
   }
 }

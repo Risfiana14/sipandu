@@ -1,98 +1,170 @@
 import 'package:flutter/material.dart';
-import 'package:sipandu/models/user_profile.dart';
+import 'package:pocketbase/pocketbase.dart'; // Correct import for PocketBase
 import 'package:sipandu/screens/edit_profile_screen.dart';
+import 'package:sipandu/services/pocketbase_client.dart';
 
-class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({Key? key}) : super(key: key);
+const String pocketBaseUrl = 'http://127.0.0.1:8090';
 
-  @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+class AuthService {
+  static final PocketBase _pb = PocketBaseClient.instance;
+
+  static Future<void> logout() async {
+    _pb.authStore.clear();
+  }
+
+  static Future<Map<String, dynamic>?> updateProfile({
+    required String id,
+    required String name,
+    required int? phone,
+    required String address,
+  }) async {
+    try {
+      final updatedData = {
+        'id': id,
+        'name': name,
+        'phone': phone,
+        'address': address,
+      };
+      final record =
+          await _pb.collection('users').update(id, body: updatedData);
+      print('Update profile response: ${record.data}'); // Debugging
+      return record.data;
+    } catch (e) {
+      print('Error updating profile: $e');
+      return null;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getCurrentUserData() async {
+    try {
+      if (_pb.authStore.isValid) {
+        final record =
+            await _pb.collection('users').getOne(_pb.authStore.model.id);
+        print('Fetched user data: ${record.data}'); // Debugging
+        return record.data;
+      }
+      return null;
+    } catch (e) {
+      print('Error fetching user data: $e');
+      return null;
+    }
+  }
 }
 
-UserProfile? _globalUserProfile;
+class ProfileScreen extends StatefulWidget {
+  final Map<String, dynamic> userData;
+
+  const ProfileScreen({Key? key, required this.userData}) : super(key: key);
+
+  @override
+  _ProfileScreenState createState() => _ProfileScreenState();
+}
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  UserProfile? _userProfile;
-  bool _isLoading = true;
+  late Map<String, dynamic> _userData;
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _loadUserProfile();
+    _userData = Map.from(widget.userData);
+    _loadUserData();
+    print('Initial userData: $_userData'); // Debugging for avatar
   }
 
-  Future<void> _loadUserProfile() async {
+  Future<void> _loadUserData() async {
+    if (_userData.isNotEmpty) return;
+
     setState(() {
       _isLoading = true;
     });
 
     try {
-      if (_globalUserProfile != null) {
+      final userData = await AuthService.getCurrentUserData();
+      if (userData != null) {
         setState(() {
-          _userProfile = _globalUserProfile;
-          _isLoading = false;
+          _userData = userData;
         });
-        return;
-      }
-
-      final dummyProfile = UserProfile(
-        id: '1',
-        email: 'user@example.com',
-        name: 'Pengguna Sipandu',
-        phone: '081234567890',
-        address: 'Jl. Contoh No. 123, Jakarta',
-        avatarUrl: null,
-        createdAt: DateTime.now(),
-      );
-
-      _globalUserProfile = dummyProfile;
-
-      if (mounted) {
+        print(
+            'Loaded userData with avatar: ${_userData['avatar']}'); // Debugging
+      } else {
         setState(() {
-          _userProfile = dummyProfile;
-          _isLoading = false;
+          _errorMessage = 'Failed to load user data';
         });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal memuat profil: ${e.toString()}')),
-        );
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _errorMessage = 'Error loading user data: $e';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
-  void _updateProfile(UserProfile updatedProfile) {
-    _globalUserProfile = updatedProfile;
+  Future<void> _updateProfile() async {
+    if (_userData.isEmpty) return;
 
-    if (mounted) {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final updatedData = await AuthService.updateProfile(
+        id: _userData['id'] as String,
+        name: _userData['name'] as String? ?? '',
+        phone: _userData['phone'] as int?,
+        address: _userData['address'] as String? ?? '',
+      );
+
+      if (updatedData != null) {
+        setState(() {
+          _userData = updatedData;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile updated successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        setState(() {
+          _errorMessage = 'Failed to update profile';
+        });
+      }
+    } catch (e) {
       setState(() {
-        _userProfile = updatedProfile;
+        _errorMessage = 'Error: $e';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
       });
     }
   }
 
   void _navigateToEditProfile() {
-    if (_userProfile == null) return;
-
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => EditProfileScreen(
-          userProfile: _userProfile!,
-          onProfileUpdated: _updateProfile,
+          userData: _userData,
+          onProfileUpdated: (updatedData) {
+            setState(() {
+              _userData = updatedData;
+            });
+          },
         ),
       ),
     );
   }
 
-  void _logout() {
-    _globalUserProfile = null;
-    Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
-    // Ganti '/login' dengan route yang sesuai untuk halaman login/register Anda
+  Future<void> _logout() async {
+    await AuthService.logout();
+    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
 
   @override
@@ -101,7 +173,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         title: const Text('Profil Saya'),
         actions: [
-          if (!_isLoading && _userProfile != null)
+          if (!_isLoading)
             IconButton(
               icon: const Icon(Icons.edit),
               onPressed: _navigateToEditProfile,
@@ -110,15 +182,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : (_userProfile == null
-              ? const Center(child: Text('Profil tidak ditemukan'))
-              : _buildProfileContent()),
+          : _buildProfileContent(),
     );
   }
 
   Widget _buildProfileContent() {
-    if (_userProfile == null) return const SizedBox.shrink();
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -126,16 +194,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           CircleAvatar(
             radius: 50,
-            backgroundImage: _userProfile!.avatarUrl != null
-                ? NetworkImage(_userProfile!.avatarUrl!)
+            backgroundImage: _userData['avatar'] != null
+                ? NetworkImage(
+                    '$pocketBaseUrl/api/files/users/${_userData['id']}/${_userData['avatar']}')
                 : null,
-            child: _userProfile!.avatarUrl == null
+            child: _userData['avatar'] == null
                 ? const Icon(Icons.person, size: 50)
                 : null,
           ),
           const SizedBox(height: 16),
           Text(
-            _userProfile!.name,
+            _userData['name'] ?? 'Pengguna Sipandu',
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -144,7 +213,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            _userProfile!.email,
+            _userData['email'] ?? 'Tidak ada email',
             style: TextStyle(
               fontSize: 16,
               color: Colors.grey[600],
@@ -158,17 +227,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               InfoItem(
                 icon: Icons.email,
                 title: 'Email',
-                value: _userProfile!.email,
+                value: _userData['email'] ?? 'Tidak diatur',
               ),
               InfoItem(
                 icon: Icons.phone,
                 title: 'Telepon',
-                value: _userProfile!.phone ?? 'Belum diatur',
+                value: (_userData['phone'] ?? '').toString(),
               ),
               InfoItem(
                 icon: Icons.home,
                 title: 'Alamat',
-                value: _userProfile!.address ?? 'Belum diatur',
+                value: _userData['address'] ?? 'Belum diatur',
               ),
             ],
           ),
@@ -177,21 +246,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
             title: 'Informasi Akun',
             items: [
               InfoItem(
-                icon: Icons.calendar_today,
-                title: 'Bergabung Sejak',
-                value:
-                    '${_userProfile!.createdAt.day}/${_userProfile!.createdAt.month}/${_userProfile!.createdAt.year}',
-              ),
-              InfoItem(
                 icon: Icons.verified_user,
                 title: 'ID Pengguna',
-                value: _userProfile!.id,
+                value: _userData['id'] ?? 'Tidak diketahui',
+              ),
+              InfoItem(
+                icon: Icons.check_circle,
+                title: 'Terverifikasi',
+                value: (_userData['verified'] ?? false) ? 'Ya' : 'Tidak',
+              ),
+              InfoItem(
+                icon: Icons.visibility,
+                title: 'Email Visibilitas',
+                value: (_userData['emailVisibility'] ?? false)
+                    ? 'Publik'
+                    : 'Pribadi',
               ),
             ],
           ),
           const SizedBox(height: 24),
+          if (_errorMessage != null)
+            Container(
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.red.shade100,
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: Colors.red.shade300),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ElevatedButton.icon(
-            onPressed: _navigateToEditProfile,
+            onPressed: _isLoading ? null : _navigateToEditProfile,
             icon: const Icon(Icons.edit),
             label: const Text('Edit Profil'),
             style: ElevatedButton.styleFrom(
@@ -200,7 +297,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 12),
           ElevatedButton.icon(
-            onPressed: _logout,
+            onPressed: _isLoading ? null : _logout,
             icon: const Icon(Icons.logout),
             label: const Text('Keluar'),
             style: ElevatedButton.styleFrom(

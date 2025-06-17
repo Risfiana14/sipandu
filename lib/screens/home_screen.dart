@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:sipandu/screens/create_report_screen.dart';
 import 'package:sipandu/screens/profile_screen.dart';
 import 'package:sipandu/screens/report_list_screen.dart';
+import 'package:sipandu/models/report.dart'; // Import model Report
+import 'package:sipandu/services/report_service.dart'; // Import ReportService
+import 'package:sipandu/screens/report_detail_screen.dart'; // Import ReportDetailScreen untuk navigasi
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final Map<String, dynamic> userData;
+
+  const HomeScreen({super.key, required this.userData});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -18,22 +23,42 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _screens = [
-      HomeContent(onViewAllPressed: _navigateToReports),
-      const ReportListScreen(),
-      const ProfileScreen(),
+      HomeContent(
+        userData: widget.userData,
+        onViewAllPressed: _navigateToReports,
+        onReportCreated:
+            _refreshHomeContent, // Tambahkan callback untuk refresh
+      ),
+      const ReportListScreen(), // Halaman daftar laporan penuh
+      ProfileScreen(userData: widget.userData),
     ];
   }
 
   void _navigateToReports() {
     setState(() {
-      _selectedIndex = 1;
+      _selectedIndex = 1; // Navigasi ke tab "Laporan"
+    });
+  }
+
+  // Fungsi ini akan dipanggil saat laporan baru berhasil dibuat
+  void _refreshHomeContent() {
+    // Memaksa HomeContent untuk di-rebuild dan mengambil data terbaru
+    setState(() {
+      _screens[0] = HomeContent(
+        userData: widget.userData,
+        onViewAllPressed: _navigateToReports,
+        onReportCreated: _refreshHomeContent,
+      );
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_selectedIndex],
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _screens,
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
@@ -60,9 +85,120 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class HomeContent extends StatelessWidget {
+class HomeContent extends StatefulWidget {
+  final Map<String, dynamic> userData;
   final VoidCallback onViewAllPressed;
-  const HomeContent({super.key, required this.onViewAllPressed});
+  final VoidCallback onReportCreated; // Callback baru
+
+  const HomeContent({
+    super.key,
+    required this.userData,
+    required this.onViewAllPressed,
+    required this.onReportCreated, // Inisialisasi callback
+  });
+
+  @override
+  State<HomeContent> createState() => _HomeContentState();
+}
+
+class _HomeContentState extends State<HomeContent> {
+  late Future<List<Report>> _recentReportsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecentReports();
+  }
+
+  void _loadRecentReports() {
+    // Ambil laporan terbaru dari layanan, batasi jumlahnya jika perlu
+    _recentReportsFuture = ReportService
+        .getUserReports(); // ReportService mengambil semua, kita filter di sini
+  }
+
+  Color _getStatusColor(ReportStatus status) {
+    switch (status) {
+      case ReportStatus.pending:
+        return Colors.orange;
+      case ReportStatus.inProcess:
+        return Colors.blue;
+      case ReportStatus.resolved:
+        return Colors.green;
+      case ReportStatus.rejected:
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _getStatusText(ReportStatus status) {
+    switch (status) {
+      case ReportStatus.pending:
+        return 'Menunggu';
+      case ReportStatus.inProcess:
+        return 'Diproses';
+      case ReportStatus.resolved:
+        return 'Selesai';
+      case ReportStatus.rejected:
+        return 'Ditolak';
+      default:
+        return 'Tidak Diketahui';
+    }
+  }
+
+  Widget _buildThumbnail(List<String> images) {
+    if (images.isEmpty) {
+      return Container(
+        width: 60, // Ukuran thumbnail lebih kecil untuk list di home
+        height: 60,
+        decoration: BoxDecoration(
+          color: Colors.grey[300],
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Icon(Icons.image, color: Colors.grey),
+      );
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.network(
+        images.first,
+        width: 60, // Ukuran thumbnail lebih kecil
+        height: 60,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Center(
+              child: CircularProgressIndicator(
+                value: loadingProgress.expectedTotalBytes != null
+                    ? loadingProgress.cumulativeBytesLoaded /
+                        loadingProgress.expectedTotalBytes!
+                    : null,
+              ),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) {
+          print('Error loading thumbnail in HomeContent: $error');
+          return Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.broken_image, color: Colors.grey),
+          );
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -85,9 +221,9 @@ class HomeContent extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Selamat datang, Pengguna!',
-                      style: TextStyle(
+                    Text(
+                      'Selamat datang, ${widget.userData['name'] ?? 'Pengguna'}!',
+                      style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -100,12 +236,19 @@ class HomeContent extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
                     ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push(
+                      onPressed: () async {
+                        final result = await Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => const CreateReportScreen(),
+                            builder: (_) =>
+                                CreateReportScreen(userData: widget.userData),
                           ),
                         );
+                        // Jika laporan berhasil dibuat (misal, dikirim balik true/success)
+                        if (result == true) {
+                          widget
+                              .onReportCreated(); // Panggil callback untuk refresh HomeContent
+                          _loadRecentReports(); // Muat ulang laporan terbaru
+                        }
                       },
                       icon: const Icon(Icons.add),
                       label: const Text('Buat Laporan Baru'),
@@ -153,13 +296,142 @@ class HomeContent extends StatelessWidget {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   TextButton(
-                    onPressed: onViewAllPressed,
+                    onPressed: widget.onViewAllPressed,
                     child: const Text('Lihat Semua'),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              const Center(child: Text('Memuat laporan terbaru Anda...')),
+              // Implementasi Laporan Terbaru menggunakan FutureBuilder
+              FutureBuilder<List<Report>>(
+                future: _recentReportsFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text(
+                          'Gagal memuat laporan: ${snapshot.error}',
+                          style: const TextStyle(color: Colors.red),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    );
+                  }
+
+                  final reports = snapshot.data ?? [];
+                  final limitedReports =
+                      reports.take(3).toList(); // Ambil hanya 3 laporan terbaru
+
+                  if (limitedReports.isEmpty) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Text('Tidak ada laporan terbaru.'),
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: limitedReports.length,
+                    itemBuilder: (context, index) {
+                      final report = limitedReports[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        elevation: 1, // Sedikit lebih rendah dari daftar penuh
+                        child: InkWell(
+                          onTap: () async {
+                            final result = await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    ReportDetailScreen(reportId: report.id),
+                              ),
+                            );
+                            if (result == true) {
+                              // Jika detail screen menandakan perubahan
+                              _loadRecentReports(); // Refresh saat kembali dari detail
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildThumbnail(report.images),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        report.title,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        report.description,
+                                        style: const TextStyle(
+                                            fontSize: 12, color: Colors.grey),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  _getStatusColor(report.status)
+                                                      .withOpacity(0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              _getStatusText(report.status),
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: _getStatusColor(
+                                                    report.status),
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                          Text(
+                                            report.formattedDate,
+                                            style: const TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -170,12 +442,19 @@ class HomeContent extends StatelessWidget {
   Widget _buildCategoryCard(
       BuildContext context, String title, IconData icon, Color color) {
     return InkWell(
-      onTap: () {
-        Navigator.of(context).push(
+      onTap: () async {
+        final result = await Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => CreateReportScreen(initialCategory: title),
+            builder: (_) => CreateReportScreen(
+              initialCategory: title,
+              userData: widget.userData,
+            ),
           ),
         );
+        if (result == true) {
+          widget.onReportCreated();
+          _loadRecentReports();
+        }
       },
       child: Card(
         elevation: 2,

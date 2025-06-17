@@ -1,7 +1,6 @@
-import 'dart:convert';
-import 'dart:typed_data';
+// lib/screens/report_list_screen.dart
 import 'package:flutter/material.dart';
-import 'package:sipandu/models/report.dart';
+import 'package:sipandu/models/report.dart'; // PASTIKAN IMPORNYA DARI models/report.dart
 import 'package:sipandu/screens/report_detail_screen.dart';
 import 'package:sipandu/services/report_service.dart';
 
@@ -64,38 +63,43 @@ class _ReportListScreenState extends State<ReportListScreen> {
       );
     }
 
-    try {
-      final bytes = base64Decode(images.first);
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.memory(
-          bytes,
-          width: 80,
-          height: 80,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.network(
+        images.first,
+        width: 80,
+        height: 80,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: Colors.grey[300],
+              color: Colors.grey[200],
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.broken_image, color: Colors.grey),
+            child: Center(
+              child: CircularProgressIndicator(
+                value: loadingProgress.expectedTotalBytes != null
+                    ? loadingProgress.cumulativeBytesLoaded /
+                        loadingProgress.expectedTotalBytes!
+                    : null,
+              ),
+            ),
+          );
+        },
+        errorBuilder: (_, __, ___) => Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            color: Colors.grey[300],
+            borderRadius: BorderRadius.circular(8),
           ),
+          child: const Icon(Icons.broken_image, color: Colors.grey),
         ),
-      );
-    } catch (e) {
-      print('Error decoding image: $e');
-      return Container(
-        width: 80,
-        height: 80,
-        decoration: BoxDecoration(
-          color: Colors.grey[300],
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Icon(Icons.broken_image, color: Colors.grey),
-      );
-    }
+      ),
+    );
   }
 
   @override
@@ -208,11 +212,8 @@ class _ReportListScreenState extends State<ReportListScreen> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Thumbnail image
                           _buildThumbnail(report.images),
                           const SizedBox(width: 12),
-
-                          // Report details
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,

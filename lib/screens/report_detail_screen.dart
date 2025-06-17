@@ -1,9 +1,9 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
+// lib/screens/report_detail_screen.dart
 import 'package:flutter/material.dart';
 import 'package:sipandu/models/report.dart';
 import 'package:sipandu/services/report_service.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 class ReportDetailScreen extends StatefulWidget {
   final String reportId;
@@ -16,6 +16,7 @@ class ReportDetailScreen extends StatefulWidget {
 
 class _ReportDetailScreenState extends State<ReportDetailScreen> {
   late Future<Report> _reportFuture;
+  final MapController _mapController = MapController();
 
   @override
   void initState() {
@@ -25,6 +26,18 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
 
   void _loadReport() {
     _reportFuture = ReportService.getReportDetails(widget.reportId);
+    _reportFuture.then((report) {
+      if (report.location.latitude != 0.0 || report.location.longitude != 0.0) {
+        _mapController.move(report.location, 15.0);
+      } else {
+        print('Lokasi laporan 0,0. Peta tidak akan di-center ke lokasi ini.');
+        // Set ke lokasi default (misalnya Malang) jika lokasi 0,0
+        _mapController.move(
+            LatLng(-7.9666, 112.6333), 10.0); // Koordinat Malang
+      }
+    }).catchError((error) {
+      print('Error loading report for map: $error');
+    });
   }
 
   Color _getStatusColor(ReportStatus status) {
@@ -37,6 +50,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         return Colors.green;
       case ReportStatus.rejected:
         return Colors.red;
+      default: // Menambahkan default case untuk menangani nilai null/unexpected
+        return Colors.grey;
     }
   }
 
@@ -50,25 +65,43 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         return 'Selesai';
       case ReportStatus.rejected:
         return 'Ditolak';
+      default: // Menambahkan default case
+        return 'Tidak Diketahui';
     }
   }
 
-  Widget _buildImage(String base64Image) {
-    try {
-      final bytes = base64Decode(base64Image);
-      return Image.memory(
-        bytes,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => const Center(
+  // >>>>>> PASTIKAN WIDGET INI MENGAMBIL URL LENGKAP <<<<<<
+  Widget _buildImage(String imageUrl) {
+    // Debugging: Print URL untuk verifikasi
+    print('Loading image: $imageUrl');
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.cover,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Center(
+          child: CircularProgressIndicator(
+            value: loadingProgress.expectedTotalBytes != null
+                ? loadingProgress.cumulativeBytesLoaded /
+                    loadingProgress.expectedTotalBytes!
+                : null,
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) {
+        // Debugging: Print error saat loading gambar
+        print('Error loading image $imageUrl: $error');
+        return const Center(
           child: Icon(Icons.broken_image, size: 40, color: Colors.grey),
-        ),
-      );
-    } catch (e) {
-      print('Error decoding image: $e');
-      return const Center(
-        child: Icon(Icons.broken_image, size: 40, color: Colors.grey),
-      );
-    }
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
   }
 
   @override
@@ -197,30 +230,60 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Lokasi
+                // Lokasi (Peta)
                 const Text(
                   'Lokasi',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  height: 250,
                   decoration: BoxDecoration(
-                    color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade400)),
+                  child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.location_on, color: Colors.red),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(report.address)),
-                    ],
+                    child: FlutterMap(
+                      mapController: _mapController,
+                      options: MapOptions(
+                        center: report.location,
+                        zoom: 15.0,
+                        interactiveFlags:
+                            InteractiveFlag.all & ~InteractiveFlag.rotate,
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'id.app.sipandu',
+                        ),
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: report.location,
+                              width: 80,
+                              height: 80,
+                              builder: (context) => Icon(
+                                Icons.location_pin,
+                                size: 50,
+                                color: Colors.red.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
+                const SizedBox(height: 8),
+                Center(
+                    child: Text(
+                        'Lat: ${report.location.latitude.toStringAsFixed(6)}, Lon: ${report.location.longitude.toStringAsFixed(6)}',
+                        style: Theme.of(context).textTheme.bodySmall)),
                 const SizedBox(height: 24),
 
                 // Tanggapan
-                if (report.response != null) ...[
+                if (report.response != null && report.response!.isNotEmpty) ...[
                   const Text(
                     'Tanggapan',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),

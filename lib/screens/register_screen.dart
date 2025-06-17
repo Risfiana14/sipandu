@@ -1,9 +1,10 @@
+// lib/screens/register_screen.dart
 import 'package:flutter/material.dart';
-import 'package:sipandu/services/auth_service.dart';
 import 'package:sipandu/screens/login_screen.dart';
+import 'package:sipandu/services/pocketbase_service.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key}); // Tambahkan konstruktor const
+  const RegisterScreen({super.key});
 
   @override
   _RegisterScreenState createState() => _RegisterScreenState();
@@ -54,25 +55,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      final result = await AuthService.register(
+      final result = await PocketBaseService.register(
         name: nameController.text.trim(),
         email: emailController.text.trim(),
         password: passwordController.text,
       );
 
       if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Registrasi berhasil! Silakan login.'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
-
+        // Navigate to LoginScreen after successful registration
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => const LoginScreen(),
+            builder: (context) => const LoginScreen(
+                fromRegister: true), // Pass fromRegister: true
           ),
         );
       } else {
@@ -84,9 +79,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (e) {
       setState(() {
         _errorMessage =
-            'Terjadi kesalahan jaringan. Periksa koneksi internet Anda.';
+            'Terjadi kesalahan jaringan atau server. Periksa koneksi internet Anda atau coba lagi nanti.';
       });
-      print('Registration error: $e');
+      print('Registration error: $e'); // Consider using a proper logger
     } finally {
       setState(() {
         _isLoading = false;
@@ -152,6 +147,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Scaffold(
       body: Column(
         children: [
+          // Header
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(20, 60, 20, 30),
@@ -174,6 +170,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ],
             ),
           ),
+          // Form
           Expanded(
             child: SingleChildScrollView(
               child: Container(
@@ -183,6 +180,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   key: _formKey,
                   child: Column(
                     children: [
+                      // Register Icon and Title
                       Container(
                         margin: const EdgeInsets.only(bottom: 20),
                         child: const Column(
@@ -209,6 +207,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const Divider(),
                       const SizedBox(height: 20),
+                      // Error message
                       if (_errorMessage != null)
                         Container(
                           width: double.infinity,
@@ -240,6 +239,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ],
                           ),
                         ),
+                      // Username Field
                       TextFormField(
                         controller: nameController,
                         decoration: const InputDecoration(
@@ -260,6 +260,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                       ),
                       const SizedBox(height: 16),
+                      // Email Field
                       TextFormField(
                         controller: emailController,
                         keyboardType: TextInputType.emailAddress,
@@ -281,6 +282,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                       ),
                       const SizedBox(height: 16),
+                      // Password Field
                       TextFormField(
                         controller: passwordController,
                         obscureText: _obscurePassword,
@@ -314,6 +316,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                       ),
                       const SizedBox(height: 16),
+                      // Confirm Password Field
                       TextFormField(
                         controller: confirmPasswordController,
                         obscureText: _obscureConfirmPassword,
@@ -348,6 +351,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                       ),
                       const SizedBox(height: 24),
+                      // Register Button
                       SizedBox(
                         width: double.infinity,
                         height: 50,
@@ -378,6 +382,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
+                      // Login Link
                       TextButton(
                         onPressed:
                             _isLoading ? null : () => Navigator.pop(context),
