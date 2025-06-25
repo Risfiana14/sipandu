@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:pocketbase/pocketbase.dart'; // Correct import for PocketBase
-import 'package:sipandu/screens/edit_profile_screen.dart';
-import 'package:sipandu/services/pocketbase_client.dart';
+import 'package:pocketbase/pocketbase.dart';
+import 'package:sipandu/screens/edit_profile_screen.dart'; // Pastikan path ini benar
+import 'package:sipandu/services/pocketbase_client.dart'; // Pastikan path ini benar
 
-const String pocketBaseUrl = 'http://127.0.0.1:8090';
+const String pocketBaseUrl = 'http://159.223.74.55:8090/';
 
+// --- PERBAIKAN PADA AUTHSERVICE ---
 class AuthService {
   static final PocketBase _pb = PocketBaseClient.instance;
 
@@ -25,9 +26,8 @@ class AuthService {
         'phone': phone,
         'address': address,
       };
-      final record =
-          await _pb.collection('users').update(id, body: updatedData);
-      print('Update profile response: ${record.data}'); // Debugging
+      // Fungsi update tidak kita ubah agar tidak memengaruhi EditProfileScreen
+      final record = await _pb.collection('users').update(id, body: updatedData);
       return record.data;
     } catch (e) {
       print('Error updating profile: $e');
@@ -35,13 +35,14 @@ class AuthService {
     }
   }
 
-  static Future<Map<String, dynamic>?> getCurrentUserData() async {
+  // PERUBAIKAN 1: Mengubah return type menjadi RecordModel?
+  // Ini penting agar kita bisa mengakses data lengkap termasuk file.
+  static Future<RecordModel?> getCurrentUserData() async {
     try {
       if (_pb.authStore.isValid) {
-        final record =
-            await _pb.collection('users').getOne(_pb.authStore.model.id);
-        print('Fetched user data: ${record.data}'); // Debugging
-        return record.data;
+        final record = await _pb.collection('users').getOne(_pb.authStore.model.id);
+        print('Fetched user record: $record'); // Debugging
+        return record; // <-- Mengembalikan seluruh RecordModel
       }
       return null;
     } catch (e) {
@@ -51,111 +52,74 @@ class AuthService {
   }
 }
 
+// --- PERBAIKAN PADA PROFILE SCREEN ---
 class ProfileScreen extends StatefulWidget {
-  final Map<String, dynamic> userData;
-
-  const ProfileScreen({Key? key, required this.userData}) : super(key: key);
+  // Kita hapus parameter userData dari constructor agar screen ini mandiri
+  const ProfileScreen({super.key});
 
   @override
-  _ProfileScreenState createState() => _ProfileScreenState();
+  State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  late Map<String, dynamic> _userData;
-  bool _isLoading = false;
+  // PERUBAIKAN 2: Mengubah tipe state menjadi RecordModel?
+  RecordModel? _userData;
+  bool _isLoading = true; // Langsung set true karena kita akan fetch data
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _userData = Map.from(widget.userData);
+    // Langsung panggil fungsi untuk memuat data saat screen dibuka
     _loadUserData();
-    print('Initial userData: $_userData'); // Debugging for avatar
   }
 
   Future<void> _loadUserData() async {
-    if (_userData.isNotEmpty) return;
-
-    setState(() {
-      _isLoading = true;
-    });
+    // Pastikan state di-set loading
+    if (!_isLoading) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
 
     try {
       final userData = await AuthService.getCurrentUserData();
-      if (userData != null) {
+      if (mounted) { // Selalu cek 'mounted' sebelum setState di async operation
         setState(() {
-          _userData = userData;
-        });
-        print(
-            'Loaded userData with avatar: ${_userData['avatar']}'); // Debugging
-      } else {
-        setState(() {
-          _errorMessage = 'Failed to load user data';
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Error loading user data: $e';
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _updateProfile() async {
-    if (_userData.isEmpty) return;
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final updatedData = await AuthService.updateProfile(
-        id: _userData['id'] as String,
-        name: _userData['name'] as String? ?? '',
-        phone: _userData['phone'] as int?,
-        address: _userData['address'] as String? ?? '',
-      );
-
-      if (updatedData != null) {
-        setState(() {
-          _userData = updatedData;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile updated successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        setState(() {
-          _errorMessage = 'Failed to update profile';
+          if (userData != null) {
+            _userData = userData;
+            print('Loaded userData with avatar: ${_userData!.data['avatar']}');
+          } else {
+            _errorMessage = 'Gagal memuat data pengguna';
+          }
         });
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Error: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Error memuat data: $e';
+        });
+      }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   void _navigateToEditProfile() {
+    if (_userData == null) return;
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => EditProfileScreen(
-          userData: _userData,
+          // Kirim data sebagai Map agar EditProfileScreen tidak perlu diubah
+          userData: _userData!.toJson(),
           onProfileUpdated: (updatedData) {
-            setState(() {
-              _userData = updatedData;
-            });
+            // Saat kembali, muat ulang data dari server untuk memastikan konsistensi
+            _loadUserData();
           },
         ),
       ),
@@ -164,7 +128,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _logout() async {
     await AuthService.logout();
-    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+    if (mounted) {
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+    }
   }
 
   @override
@@ -173,51 +139,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         title: const Text('Profil Saya'),
         actions: [
-          if (!_isLoading)
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: _navigateToEditProfile,
-            ),
+          // Tambahkan tombol refresh untuk memudahkan debugging
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadUserData,
+          ),
         ],
       ),
+      // Tampilkan loading indicator atau profile content
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _buildProfileContent(),
+          : _userData == null
+              ? Center(child: Text(_errorMessage ?? 'Data tidak ditemukan.'))
+              : _buildProfileContent(),
     );
   }
 
   Widget _buildProfileContent() {
+    // Ambil instance PocketBase
+    final pb = PocketBaseClient.instance;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // PERUBAIKAN 3: Menggunakan pb.getFileUrl untuk menampilkan avatar
           CircleAvatar(
             radius: 50,
-            backgroundImage: _userData['avatar'] != null
+            backgroundImage: (_userData!.data['avatar'] != null &&
+                    _userData!.data['avatar'].isNotEmpty)
                 ? NetworkImage(
-                    '$pocketBaseUrl/api/files/users/${_userData['id']}/${_userData['avatar']}')
+                    // Membuat URL aman yang berisi token sementara
+                    pb.getFileUrl(_userData!, _userData!.data['avatar']).toString(),
+                  )
                 : null,
-            child: _userData['avatar'] == null
+            child: (_userData!.data['avatar'] == null ||
+                    _userData!.data['avatar'].isEmpty)
                 ? const Icon(Icons.person, size: 50)
                 : null,
           ),
           const SizedBox(height: 16),
+          // PERUBAIKAN 4: Mengakses data melalui _userData.data['...']
           Text(
-            _userData['name'] ?? 'Pengguna Sipandu',
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+            _userData!.data['name']?.toString() ?? 'Pengguna Sipandu',
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           Text(
-            _userData['email'] ?? 'Tidak ada email',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
-            ),
+            _userData!.data['email']?.toString() ?? 'Tidak ada email',
+            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -227,17 +199,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               InfoItem(
                 icon: Icons.email,
                 title: 'Email',
-                value: _userData['email'] ?? 'Tidak diatur',
+                value: _userData!.data['email']?.toString() ?? 'Tidak diatur',
               ),
               InfoItem(
                 icon: Icons.phone,
                 title: 'Telepon',
-                value: (_userData['phone'] ?? '').toString(),
+                value: _userData!.data['phone']?.toString() ?? 'Belum diatur',
               ),
               InfoItem(
                 icon: Icons.home,
                 title: 'Alamat',
-                value: _userData['address'] ?? 'Belum diatur',
+                value: _userData!.data['address']?.toString() ?? 'Belum diatur',
               ),
             ],
           ),
@@ -248,60 +220,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
               InfoItem(
                 icon: Icons.verified_user,
                 title: 'ID Pengguna',
-                value: _userData['id'] ?? 'Tidak diketahui',
+                value: _userData!.id, // ID bisa diakses langsung
               ),
               InfoItem(
                 icon: Icons.check_circle,
                 title: 'Terverifikasi',
-                value: (_userData['verified'] ?? false) ? 'Ya' : 'Tidak',
+                value: _userData!.data['verified'] == true ? 'Ya' : 'Tidak',
               ),
               InfoItem(
                 icon: Icons.visibility,
                 title: 'Email Visibilitas',
-                value: (_userData['emailVisibility'] ?? false)
-                    ? 'Publik'
-                    : 'Pribadi',
+                value: _userData!.data['emailVisibility'] == true ? 'Publik' : 'Pribadi',
               ),
             ],
           ),
           const SizedBox(height: 24),
           if (_errorMessage != null)
-            Container(
-              padding: const EdgeInsets.all(10),
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                color: Colors.red.shade100,
-                borderRadius: BorderRadius.circular(5),
-                border: Border.all(color: Colors.red.shade300),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.red),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _errorMessage!,
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  ),
-                ],
-              ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
             ),
           ElevatedButton.icon(
-            onPressed: _isLoading ? null : _navigateToEditProfile,
+            onPressed: _navigateToEditProfile,
             icon: const Icon(Icons.edit),
             label: const Text('Edit Profil'),
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size.fromHeight(50),
-            ),
+            style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
           ),
           const SizedBox(height: 12),
           ElevatedButton.icon(
-            onPressed: _isLoading ? null : _logout,
+            onPressed: _logout,
             icon: const Icon(Icons.logout),
             label: const Text('Keluar'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
+              backgroundColor: Colors.red.shade700,
               foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(50),
             ),
@@ -313,6 +264,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildInfoCard(
       {required String title, required List<InfoItem> items}) {
+    // Widget ini tidak perlu diubah
     return Card(
       elevation: 2,
       child: Padding(
@@ -320,13 +272,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text(title,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             ...items.map((item) => Padding(
                   padding: const EdgeInsets.only(bottom: 12.0),
@@ -339,19 +286,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              item.title,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                            Text(
-                              item.value,
-                              style: const TextStyle(
-                                fontSize: 16,
-                              ),
-                            ),
+                            Text(item.title,
+                                style: TextStyle(
+                                    fontSize: 14, color: Colors.grey[600])),
+                            Text(item.value, style: const TextStyle(fontSize: 16)),
                           ],
                         ),
                       ),
@@ -366,6 +304,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 class InfoItem {
+  // Class ini tidak perlu diubah
   final IconData icon;
   final String title;
   final String value;

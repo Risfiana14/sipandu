@@ -16,7 +16,7 @@ import 'package:flutter/foundation.dart'
 // Tapi import ini diperlukan agar kode tidak error saat parsing.
 import 'dart:io' if (dart.library.html) 'dart:html';
 
-const String pocketBaseUrl = 'http://127.0.0.1:8090'; // URL PocketBase Anda
+const String pocketBaseUrl = 'http://159.223.74.55:8090'; // URL PocketBase Anda
 
 class CreateReportScreen extends StatefulWidget {
   /// Parameter untuk mengisi kategori secara otomatis jika diakses dari

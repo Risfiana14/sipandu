@@ -1,11 +1,31 @@
 // lib/models/report.dart
 import 'package:latlong2/latlong.dart';
+// import 'package:sipandu/models/user_data.dart'; // Hilangkan komentar jika Anda punya model UserData
+
+// Model sederhana untuk data user yang di-expand
+class ReporterData {
+  final String id;
+  final String name;
+  final String email;
+
+  ReporterData({required this.id, required this.name, required this.email});
+
+  factory ReporterData.fromJson(Map<String, dynamic> json) {
+    return ReporterData(
+      id: json['id'] ?? '',
+      name: json['name'] ?? 'Nama Tidak Ada',
+      email: json['email'] ?? 'Email Tidak Ada',
+    );
+  }
+}
+
 
 enum ReportStatus {
   pending,
   inProcess,
   resolved,
   rejected,
+  unknown, // Tambahkan status unknown untuk fallback
 }
 
 class Report {
@@ -14,12 +34,13 @@ class Report {
   final String title;
   final String category;
   final String description;
-  final List<String> images; // List of FULL URLs
+  final List<String> images; // Ini akan berisi FULL URLs dari ReportService
   final LatLng location;
-  ReportStatus status; // <--- UBAH INI: Hapus 'final'
-  final String created;
-  final String updated;
+  ReportStatus status;
+  final DateTime created;
+  final DateTime updated;
   final String? response;
+  final ReporterData? reporter; // Opsional: untuk menampung data user dari 'expand'
 
   Report({
     required this.id,
@@ -33,68 +54,38 @@ class Report {
     required this.created,
     required this.updated,
     this.response,
+    this.reporter,
   });
 
-  // Tambahkan fungsi copyWith untuk kemudahan membuat instance baru dengan perubahan
-  Report copyWith({
-    String? id,
-    String? userId,
-    String? title,
-    String? category,
-    String? description,
-    List<String>? images,
-    LatLng? location,
-    ReportStatus? status,
-    String? created,
-    String? updated,
-    String? response,
-  }) {
-    return Report(
-      id: id ?? this.id,
-      userId: userId ?? this.userId,
-      title: title ?? this.title,
-      category: category ?? this.category,
-      description: description ?? this.description,
-      images: images ?? this.images,
-      location: location ?? this.location,
-      status: status ?? this.status,
-      created: created ?? this.created,
-      updated: updated ?? this.updated,
-      response: response ?? this.response,
-    );
-  }
-
   factory Report.fromJson(Map<String, dynamic> json) {
+    // --- Parsing Lokasi ---
     LatLng parsedLocation;
-    if (json['lokasi'] != null &&
-        json['lokasi'] is Map &&
-        json['lokasi']['latitude'] != null &&
-        json['lokasi']['longitude'] != null) {
+    final locData = json['lokasi'];
+    if (locData is Map && locData['latitude'] != null && locData['longitude'] != null) {
       parsedLocation = LatLng(
-        (json['lokasi']['latitude'] as num).toDouble(), // Pastikan double
-        (json['lokasi']['longitude'] as num).toDouble(), // Pastikan double
+        (locData['latitude'] as num).toDouble(),
+        (locData['longitude'] as num).toDouble(),
       );
     } else {
-      print(
-          'Warning: Lokasi tidak valid atau tidak ditemukan. Menggunakan 0,0. Data mentah: ${json['lokasi']}');
-      parsedLocation = LatLng(0.0, 0.0);
+      parsedLocation = LatLng(0.0, 0.0); // Fallback location
     }
 
     return Report(
-      id: json['id'] as String,
-      userId: json['user_id'] as String,
-      title: json['judul'] as String,
-      category: json['kategori'] as String,
-      description: json['deskripsi'] as String,
-      images: (json['gambar'] as List<dynamic>?)
-              ?.map((e) => e as String)
-              .toList() ??
-          [],
+      id: json['id'] ?? '',
+      userId: json['user_id'] ?? '',
+      title: json['judul'] ?? 'Tanpa Judul',
+      category: json['kategori'] ?? 'Lainnya',
+      description: json['deskripsi'] ?? 'Tidak ada deskripsi.',
+      images: List<String>.from(json['gambar'] ?? []), // Langsung cast ke List<String>
       location: parsedLocation,
-      status: _parseReportStatus(json['status'] as String),
-      created: json['created'] as String,
-      updated: json['updated'] as String,
-      response: json['tanggapan'] as String?,
+      status: _parseReportStatus(json['status'] ?? ''),
+      created: DateTime.tryParse(json['created'] ?? '') ?? DateTime.now(),
+      updated: DateTime.tryParse(json['updated'] ?? '') ?? DateTime.now(),
+      response: json['tanggapan'],
+      // Jika ada data user dari expand, parse juga
+      reporter: json.containsKey('user_data')
+          ? ReporterData.fromJson(json['user_data'])
+          : null,
     );
   }
 
@@ -109,13 +100,13 @@ class Report {
       case 'ditolak':
         return ReportStatus.rejected;
       default:
-        return ReportStatus.pending;
+        return ReportStatus.unknown;
     }
   }
 
   String get formattedDate {
-    final dateTime = DateTime.parse(created).toLocal();
-    return "${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute}";
+    // Format tanggal menjadi: 19/6/2025
+    return "${created.day}/${created.month}/${created.year}";
   }
 
   String get address {

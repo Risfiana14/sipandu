@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:sipandu/models/report.dart';
 import 'package:sipandu/screens/create_report_screen.dart';
 import 'package:sipandu/screens/profile_screen.dart';
+import 'package:sipandu/screens/report_detail_screen.dart';
 import 'package:sipandu/screens/report_list_screen.dart';
-import 'package:sipandu/models/report.dart'; // Import model Report
-import 'package:sipandu/services/report_service.dart'; // Import ReportService
-import 'package:sipandu/screens/report_detail_screen.dart'; // Import ReportDetailScreen untuk navigasi
+import 'package:sipandu/services/report_service.dart';
 
 class HomeScreen extends StatefulWidget {
+  // userData masih diperlukan untuk diteruskan ke halaman lain seperti CreateReport
   final Map<String, dynamic> userData;
 
   const HomeScreen({super.key, required this.userData});
@@ -17,39 +18,47 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-  late final List<Widget> _screens;
 
-  @override
-  void initState() {
-    super.initState();
-    _screens = [
-      HomeContent(
-        userData: widget.userData,
-        onViewAllPressed: _navigateToReports,
-        onReportCreated:
-            _refreshHomeContent, // Tambahkan callback untuk refresh
-      ),
-      const ReportListScreen(), // Halaman daftar laporan penuh
-      ProfileScreen(userData: widget.userData),
-    ];
-  }
+  // Key unik untuk HomeContent, digunakan untuk memicu rebuild penuh saat refresh
+  Key _homeContentKey = UniqueKey();
 
-  void _navigateToReports() {
+  // Daftar screen tidak perlu dibuat di initState agar key bisa diperbarui
+  List<Widget> _getScreens() => [
+        HomeContent(
+          key: _homeContentKey, // Gunakan key di sini
+          userData: widget.userData,
+          onViewAllPressed: () => _onItemTapped(1), // Pindah ke tab Laporan
+          onNavigate: _navigateAndRefresh, // Teruskan fungsi navigasi
+        ),
+        const ReportListScreen(),
+        // ProfileScreen sudah diubah menjadi mandiri (tidak butuh userData di constructor)
+        ProfileScreen(),
+      ];
+
+  void _onItemTapped(int index) {
     setState(() {
-      _selectedIndex = 1; // Navigasi ke tab "Laporan"
+      _selectedIndex = index;
     });
   }
 
-  // Fungsi ini akan dipanggil saat laporan baru berhasil dibuat
+  // Fungsi ini akan memaksa HomeContent untuk dibuat ulang dengan data baru
   void _refreshHomeContent() {
-    // Memaksa HomeContent untuk di-rebuild dan mengambil data terbaru
     setState(() {
-      _screens[0] = HomeContent(
-        userData: widget.userData,
-        onViewAllPressed: _navigateToReports,
-        onReportCreated: _refreshHomeContent,
-      );
+      _homeContentKey = UniqueKey();
     });
+  }
+  
+  // Fungsi terpusat untuk navigasi yang mungkin memerlukan refresh setelahnya
+  void _navigateAndRefresh(Widget screen) async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => screen),
+    );
+
+    // Jika halaman yang dituju (misal Create/Detail) mengembalikan true,
+    // refresh konten halaman beranda
+    if (result == true && mounted) {
+      _refreshHomeContent();
+    }
   }
 
   @override
@@ -57,15 +66,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: _screens,
+        children: _getScreens(),
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+        onTap: _onItemTapped,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home),
@@ -85,16 +90,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// =======================================================================
+// WIDGET KONTEN UTAMA HALAMAN BERANDA
+// =======================================================================
+
 class HomeContent extends StatefulWidget {
   final Map<String, dynamic> userData;
   final VoidCallback onViewAllPressed;
-  final VoidCallback onReportCreated; // Callback baru
+  final void Function(Widget) onNavigate;
 
   const HomeContent({
     super.key,
     required this.userData,
     required this.onViewAllPressed,
-    required this.onReportCreated, // Inisialisasi callback
+    required this.onNavigate,
   });
 
   @override
@@ -111,9 +120,9 @@ class _HomeContentState extends State<HomeContent> {
   }
 
   void _loadRecentReports() {
-    // Ambil laporan terbaru dari layanan, batasi jumlahnya jika perlu
-    _recentReportsFuture = ReportService
-        .getUserReports(); // ReportService mengambil semua, kita filter di sini
+    setState(() {
+      _recentReportsFuture = ReportService.getUserReports();
+    });
   }
 
   Color _getStatusColor(ReportStatus status) {
@@ -126,7 +135,7 @@ class _HomeContentState extends State<HomeContent> {
         return Colors.green;
       case ReportStatus.rejected:
         return Colors.red;
-      default:
+      case ReportStatus.unknown:
         return Colors.grey;
     }
   }
@@ -141,32 +150,35 @@ class _HomeContentState extends State<HomeContent> {
         return 'Selesai';
       case ReportStatus.rejected:
         return 'Ditolak';
-      default:
+      case ReportStatus.unknown:
         return 'Tidak Diketahui';
     }
   }
 
-  Widget _buildThumbnail(List<String> images) {
-    if (images.isEmpty) {
+  Widget _buildThumbnail(List<String> imageUrls) {
+    if (imageUrls.isEmpty) {
       return Container(
-        width: 60, // Ukuran thumbnail lebih kecil untuk list di home
+        width: 60,
         height: 60,
         decoration: BoxDecoration(
-          color: Colors.grey[300],
+          color: Colors.grey[200],
           borderRadius: BorderRadius.circular(8),
         ),
-        child: const Icon(Icons.image, color: Colors.grey),
+        child: Icon(Icons.image_not_supported, color: Colors.grey[400]),
       );
     }
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: Image.network(
-        images.first,
-        width: 60, // Ukuran thumbnail lebih kecil
+        imageUrls.first,
+        width: 60,
         height: 60,
         fit: BoxFit.cover,
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
+          return Center(child: CircularProgressIndicator(strokeWidth: 2));
+        },
+        errorBuilder: (context, error, stackTrace) {
           return Container(
             width: 60,
             height: 60,
@@ -174,26 +186,7 @@ class _HomeContentState extends State<HomeContent> {
               color: Colors.grey[200],
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Center(
-              child: CircularProgressIndicator(
-                value: loadingProgress.expectedTotalBytes != null
-                    ? loadingProgress.cumulativeBytesLoaded /
-                        loadingProgress.expectedTotalBytes!
-                    : null,
-              ),
-            ),
-          );
-        },
-        errorBuilder: (context, error, stackTrace) {
-          print('Error loading thumbnail in HomeContent: $error');
-          return Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.broken_image, color: Colors.grey),
+            child: Icon(Icons.broken_image, color: Colors.grey[400]),
           );
         },
       ),
@@ -205,266 +198,193 @@ class _HomeContentState extends State<HomeContent> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Sipandu'),
+        centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor,
-                  borderRadius: BorderRadius.circular(15),
+      body: RefreshIndicator(
+        onRefresh: () async => _loadRecentReports(),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // --- KARTU SELAMAT DATANG ---
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor,
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Selamat datang, ${widget.userData['name'] ?? 'Pengguna'}!',
+                        style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Laporkan masalah di komunitas Anda dan bantu membuat perubahan.',
+                        style: TextStyle(fontSize: 14, color: Colors.white70),
+                      ),
+                      const SizedBox(height: 20),
+                      ElevatedButton.icon(
+                        onPressed: () => widget.onNavigate(
+                          CreateReportScreen(userData: widget.userData),
+                        ),
+                        icon: const Icon(Icons.add_circle_outline),
+                        label: const Text('Buat Laporan Baru'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Theme.of(context).primaryColor,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: 24),
+                // --- JUDUL KATEGORI ---
+                const Text('Kategori Laporan',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                // --- GRID KATEGORI ---
+                GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
                   children: [
-                    Text(
-                      'Selamat datang, ${widget.userData['name'] ?? 'Pengguna'}!',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Laporkan masalah di komunitas Anda dan bantu membuat perubahan',
-                      style: TextStyle(fontSize: 14, color: Colors.white),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final result = await Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                CreateReportScreen(userData: widget.userData),
-                          ),
-                        );
-                        // Jika laporan berhasil dibuat (misal, dikirim balik true/success)
-                        if (result == true) {
-                          widget
-                              .onReportCreated(); // Panggil callback untuk refresh HomeContent
-                          _loadRecentReports(); // Muat ulang laporan terbaru
-                        }
-                      },
-                      icon: const Icon(Icons.add),
-                      label: const Text('Buat Laporan Baru'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Theme.of(context).primaryColor,
-                      ),
+                    _buildCategoryCard(context, 'Jalan', Icons.add_road_outlined, Colors.orange),
+                    _buildCategoryCard(context, 'Sampah', Icons.delete_outline, Colors.green),
+                    _buildCategoryCard(context, 'Air', Icons.water_drop_outlined, Colors.blue),
+                    _buildCategoryCard(context, 'Penerangan', Icons.lightbulb_outline, Colors.amber),
+                    _buildCategoryCard(context, 'Keamanan', Icons.security_outlined, Colors.red),
+                    _buildCategoryCard(context, 'Lainnya', Icons.more_horiz_outlined, Colors.purple),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // --- JUDUL LAPORAN TERBARU ---
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Laporan Terbaru',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    TextButton(
+                      onPressed: widget.onViewAllPressed,
+                      child: const Text('Lihat Semua'),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Kategori Laporan',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 3,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                children: [
-                  _buildCategoryCard(
-                      context, 'Jalan', Icons.add_road, Colors.orange),
-                  _buildCategoryCard(
-                      context, 'Sampah', Icons.delete, Colors.green),
-                  _buildCategoryCard(
-                      context, 'Air', Icons.water_drop, Colors.blue),
-                  _buildCategoryCard(
-                      context, 'Penerangan', Icons.lightbulb, Colors.amber),
-                  _buildCategoryCard(
-                      context, 'Keamanan', Icons.security, Colors.red),
-                  _buildCategoryCard(
-                      context, 'Lainnya', Icons.more_horiz, Colors.purple),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Laporan Terbaru',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  TextButton(
-                    onPressed: widget.onViewAllPressed,
-                    child: const Text('Lihat Semua'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Implementasi Laporan Terbaru menggunakan FutureBuilder
-              FutureBuilder<List<Report>>(
-                future: _recentReportsFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Text(
-                          'Gagal memuat laporan: ${snapshot.error}',
-                          style: const TextStyle(color: Colors.red),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    );
-                  }
-
-                  final reports = snapshot.data ?? [];
-                  final limitedReports =
-                      reports.take(3).toList(); // Ambil hanya 3 laporan terbaru
-
-                  if (limitedReports.isEmpty) {
-                    return const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(16.0),
+                const SizedBox(height: 8),
+                // --- DAFTAR LAPORAN TERBARU ---
+                FutureBuilder<List<Report>>(
+                  future: _recentReportsFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: Padding(
+                        padding: EdgeInsets.all(32.0),
+                        child: CircularProgressIndicator(),
+                      ));
+                    }
+                    if (snapshot.hasError) {
+                      return Center(child: Text('Gagal memuat laporan: ${snapshot.error}'));
+                    }
+                    final reports = snapshot.data ?? [];
+                    if (reports.isEmpty) {
+                      return const Center(child: Padding(
+                        padding: EdgeInsets.all(32.0),
                         child: Text('Tidak ada laporan terbaru.'),
-                      ),
-                    );
-                  }
-
-                  return ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: limitedReports.length,
-                    itemBuilder: (context, index) {
-                      final report = limitedReports[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        elevation: 1, // Sedikit lebih rendah dari daftar penuh
-                        child: InkWell(
-                          onTap: () async {
-                            final result = await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    ReportDetailScreen(reportId: report.id),
-                              ),
-                            );
-                            if (result == true) {
-                              // Jika detail screen menandakan perubahan
-                              _loadRecentReports(); // Refresh saat kembali dari detail
-                            }
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildThumbnail(report.images),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        report.title,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
+                      ));
+                    }
+                    // Batasi hanya 3 laporan di halaman beranda
+                    final limitedReports = reports.take(3).toList();
+                    return ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: limitedReports.length,
+                      itemBuilder: (context, index) {
+                        final report = limitedReports[index];
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: InkWell(
+                            onTap: () => widget.onNavigate(ReportDetailScreen(reportId: report.id)),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildThumbnail(report.images),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(report.title,
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis),
+                                        const SizedBox(height: 4),
+                                        Text(report.description,
+                                            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis),
+                                        const SizedBox(height: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: _getStatusColor(report.status).withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            _getStatusText(report.status).toUpperCase(),
+                                            style: TextStyle(
+                                                fontSize: 10,
+                                                color: _getStatusColor(report.status),
+                                                fontWeight: FontWeight.bold),
+                                          ),
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        report.description,
-                                        style: const TextStyle(
-                                            fontSize: 12, color: Colors.grey),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 6, vertical: 3),
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  _getStatusColor(report.status)
-                                                      .withOpacity(0.1),
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                            child: Text(
-                                              _getStatusText(report.status),
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: _getStatusColor(
-                                                    report.status),
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                          Text(
-                                            report.formattedDate,
-                                            style: const TextStyle(
-                                                fontSize: 10,
-                                                color: Colors.grey),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ],
+                        );
+                      },
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildCategoryCard(
-      BuildContext context, String title, IconData icon, Color color) {
+  Widget _buildCategoryCard(BuildContext context, String title, IconData icon, Color color) {
     return InkWell(
-      onTap: () async {
-        final result = await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => CreateReportScreen(
-              initialCategory: title,
-              userData: widget.userData,
-            ),
-          ),
-        );
-        if (result == true) {
-          widget.onReportCreated();
-          _loadRecentReports();
-        }
-      },
+      onTap: () => widget.onNavigate(
+        CreateReportScreen(
+          initialCategory: title,
+          userData: widget.userData,
+        ),
+      ),
       child: Card(
         elevation: 2,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.2),
+                color: color.withOpacity(0.15),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: color, size: 30),

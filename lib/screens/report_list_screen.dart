@@ -1,6 +1,6 @@
 // lib/screens/report_list_screen.dart
 import 'package:flutter/material.dart';
-import 'package:sipandu/models/report.dart'; // PASTIKAN IMPORNYA DARI models/report.dart
+import 'package:sipandu/models/report.dart';
 import 'package:sipandu/screens/report_detail_screen.dart';
 import 'package:sipandu/services/report_service.dart';
 
@@ -20,10 +20,14 @@ class _ReportListScreenState extends State<ReportListScreen> {
     _refreshReports();
   }
 
+  // Menggunakan setState di dalam _refreshReports untuk memastikan UI diperbarui
   void _refreshReports() {
-    _reportsFuture = ReportService.getUserReports();
+    setState(() {
+      _reportsFuture = ReportService.getUserReports();
+    });
   }
 
+  // PERBAIKAN 1: Tambahkan case untuk ReportStatus.unknown
   Color _getStatusColor(ReportStatus status) {
     switch (status) {
       case ReportStatus.pending:
@@ -34,9 +38,12 @@ class _ReportListScreenState extends State<ReportListScreen> {
         return Colors.green;
       case ReportStatus.rejected:
         return Colors.red;
+      case ReportStatus.unknown: // <-- TAMBAHKAN INI
+        return Colors.grey;
     }
   }
 
+  // PERBAIKAN 2: Tambahkan case untuk ReportStatus.unknown
   String _getStatusText(ReportStatus status) {
     switch (status) {
       case ReportStatus.pending:
@@ -47,19 +54,22 @@ class _ReportListScreenState extends State<ReportListScreen> {
         return 'Selesai';
       case ReportStatus.rejected:
         return 'Ditolak';
+      case ReportStatus.unknown: // <-- TAMBAHKAN INI
+        return 'Tidak Diketahui';
     }
   }
 
+  // Widget ini sudah benar karena menerima URL lengkap dari ReportService
   Widget _buildThumbnail(List<String> images) {
     if (images.isEmpty) {
       return Container(
         width: 80,
         height: 80,
         decoration: BoxDecoration(
-          color: Colors.grey[300],
+          color: Colors.grey[200],
           borderRadius: BorderRadius.circular(8),
         ),
-        child: const Icon(Icons.image, color: Colors.grey),
+        child: Icon(Icons.image_not_supported, color: Colors.grey[400]),
       );
     }
 
@@ -72,20 +82,12 @@ class _ReportListScreenState extends State<ReportListScreen> {
         fit: BoxFit.cover,
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
-          return Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: CircularProgressIndicator(
-                value: loadingProgress.expectedTotalBytes != null
-                    ? loadingProgress.cumulativeBytesLoaded /
-                        loadingProgress.expectedTotalBytes!
-                    : null,
-              ),
+          return Center(
+            child: CircularProgressIndicator(
+              value: loadingProgress.expectedTotalBytes != null
+                  ? loadingProgress.cumulativeBytesLoaded /
+                      loadingProgress.expectedTotalBytes!
+                  : null,
             ),
           );
         },
@@ -93,10 +95,10 @@ class _ReportListScreenState extends State<ReportListScreen> {
           width: 80,
           height: 80,
           decoration: BoxDecoration(
-            color: Colors.grey[300],
+            color: Colors.grey[200],
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Icon(Icons.broken_image, color: Colors.grey),
+          child: Icon(Icons.broken_image, color: Colors.grey[400]),
         ),
       ),
     );
@@ -110,19 +112,13 @@ class _ReportListScreenState extends State<ReportListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              setState(() {
-                _refreshReports();
-              });
-            },
+            onPressed: _refreshReports,
           ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          setState(() {
-            _refreshReports();
-          });
+          _refreshReports();
         },
         child: FutureBuilder<List<Report>>(
           future: _reportsFuture,
@@ -133,23 +129,21 @@ class _ReportListScreenState extends State<ReportListScreen> {
 
             if (snapshot.hasError) {
               return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline,
-                        size: 60, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text('Error: ${snapshot.error}'),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _refreshReports();
-                        });
-                      },
-                      child: const Text('Coba Lagi'),
-                    ),
-                  ],
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 60, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text('Gagal memuat data: ${snapshot.error}', textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _refreshReports,
+                        child: const Text('Coba Lagi'),
+                      ),
+                    ],
+                  ),
                 ),
               );
             }
@@ -163,18 +157,13 @@ class _ReportListScreenState extends State<ReportListScreen> {
                   children: [
                     Icon(Icons.report_off, size: 80, color: Colors.grey[400]),
                     const SizedBox(height: 16),
-                    const Text(
-                      'Belum ada laporan',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    const Text('Belum ada laporan',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 32),
                       child: Text(
-                        'Silahkan buat laporan pertama Anda',
+                        'Silakan buat laporan pertama Anda dari halaman Beranda.',
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -193,19 +182,17 @@ class _ReportListScreenState extends State<ReportListScreen> {
                   margin: const EdgeInsets.only(bottom: 12),
                   elevation: 2,
                   child: InkWell(
-                    onTap: () {
-                      Navigator.of(context)
-                          .push(
+                    onTap: () async {
+                      // Navigasi ke detail, dan refresh saat kembali jika perlu
+                      final result = await Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) =>
-                              ReportDetailScreen(reportId: report.id),
+                          builder: (_) => ReportDetailScreen(reportId: report.id),
                         ),
-                      )
-                          .then((_) {
-                        setState(() {
-                          _refreshReports();
-                        });
-                      });
+                      );
+                      // Jika halaman detail mengembalikan true, berarti ada update status
+                      if (result == true) {
+                        _refreshReports();
+                      }
                     },
                     child: Padding(
                       padding: const EdgeInsets.all(12),
@@ -219,15 +206,12 @@ class _ReportListScreenState extends State<ReportListScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: _getStatusColor(report.status)
-                                            .withOpacity(0.2),
+                                        color: _getStatusColor(report.status).withOpacity(0.2),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Text(
@@ -235,10 +219,10 @@ class _ReportListScreenState extends State<ReportListScreen> {
                                         style: TextStyle(
                                           color: _getStatusColor(report.status),
                                           fontWeight: FontWeight.bold,
+                                          fontSize: 12,
                                         ),
                                       ),
                                     ),
-                                    const Spacer(),
                                     Text(
                                       report.formattedDate,
                                       style: const TextStyle(
@@ -248,46 +232,31 @@ class _ReportListScreenState extends State<ReportListScreen> {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 8),
                                 Text(
                                   report.title,
                                   style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 4),
                                 Text(
                                   report.description,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: Colors.grey.shade600),
                                 ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[200],
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        report.category,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    const Icon(
-                                      Icons.arrow_forward_ios,
-                                      size: 16,
-                                      color: Colors.grey,
-                                    ),
-                                  ],
+                                const SizedBox(height: 8),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Icon(
+                                    Icons.arrow_forward_ios,
+                                    size: 16,
+                                    color: Colors.grey.shade400,
+                                  ),
                                 ),
                               ],
                             ),

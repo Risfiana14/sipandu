@@ -1,6 +1,6 @@
 import 'package:pocketbase/pocketbase.dart';
 
-const String pocketBaseUrl = 'http://127.0.0.1:8090';
+const String pocketBaseUrl = 'http://159.223.74.55:8090/';
 
 class AuthService {
   static final PocketBase _pb = PocketBase(pocketBaseUrl);

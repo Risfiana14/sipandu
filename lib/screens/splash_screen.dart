@@ -4,10 +4,8 @@ import 'package:sipandu/screens/home_screen.dart';
 import 'package:sipandu/screens/login_screen.dart';
 import 'package:sipandu/services/pocketbase_client.dart'; // Ensure this is imported
 
-// Removed 'const String pocketBaseUrl' as it's now in pocketbase_client.dart
-
 class AuthService {
-  // Use the PocketBase instance from PocketBaseClient
+
   static final PocketBase _pb = PocketBaseClient.instance;
 
   static Future<bool> isLoggedIn() async {

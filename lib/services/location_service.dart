@@ -53,7 +53,6 @@ class LocationService {
       List<Placemark> placemarks = await placemarkFromCoordinates(
         position.latitude,
         position.longitude,
-        localeIdentifier: 'id_ID', // Gunakan locale Indonesia
       );
 
       if (placemarks.isNotEmpty) {
