@@ -1,13 +1,12 @@
-// lib/screens/login_screen.dart
 import 'package:flutter/material.dart';
-import 'package:pocketbase/pocketbase.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:sipandu/screens/home_screen.dart';
 import 'package:sipandu/screens/dashboard_admin_screen.dart';
-import 'package:sipandu/services/pocketbase_client.dart';
 import 'package:sipandu/screens/register_screen.dart';
+import 'package:sipandu/services/auth_service.dart'; // Impor AuthService baru
 
 class LoginScreen extends StatefulWidget {
-  // Make fromRegister optional with a default value
   final bool fromRegister;
   const LoginScreen({super.key, this.fromRegister = false});
 
@@ -18,14 +17,13 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final PocketBase _pb = PocketBaseClient.instance;
+  final AuthService _authService = AuthService(); // Instance dari AuthService (Benar, bukan static)
   bool _isLoading = false;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    // If we came from registration, show a success message
     if (widget.fromRegister) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -46,71 +44,77 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final authData = await _pb.collection('users').authWithPassword(
-            _emailController.text,
-            _passwordController.text,
+      // 1. Lakukan Autentikasi via Firebase Auth
+      User? user = await _authService.loginWithEmailAndPassword(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
+      );
+
+      if (user != null) {
+        // 2. Ambil data peran (role) dari dokumen Firestore di koleksi 'users'
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        if (userDoc.exists && userDoc.data() != null) {
+          Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
+          final userRole = userData['role'] as String?;
+
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Login berhasil sebagai $userRole')),
           );
 
-      final RecordModel? userRecord = _pb.authStore.model;
-
-      if (userRecord != null && userRecord.data['role'] != null) {
-        final userRole = userRecord.data['role'] as String;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login berhasil sebagai $userRole')),
-        );
-
-        if (userRole == 'admin') {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => const DashboardAdminScreen(),
-            ),
-          );
-        } else if (userRole == 'user') {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => HomeScreen(userData: userRecord.data),
-            ),
-          );
+          // 3. Arahkan halaman berdasarkan Role pengguna
+          if (userRole == 'admin') {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => const DashboardAdminScreen(),
+              ),
+            );
+          } else if (userRole == 'user') {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => HomeScreen(userData: userData),
+              ),
+            );
+          } else {
+            if (mounted) {
+              setState(() {
+                _errorMessage = 'Peran pengguna tidak dikenal. Silakan hubungi administrator.';
+              });
+            }
+            await _authService.logout();
+          }
         } else {
-          setState(() {
-            _errorMessage =
-                'Peran pengguna tidak dikenal. Silakan hubungi administrator.';
-          });
-          _pb.authStore.clear();
+          if (mounted) {
+            setState(() {
+              _errorMessage = 'Data pengguna tidak ditemukan di database.';
+            });
+          }
+          await _authService.logout();
         }
       } else {
-        setState(() {
-          _errorMessage =
-              'Gagal mendapatkan data peran pengguna. Silakan coba lagi.';
-        });
-        _pb.authStore.clear();
-      }
-    } on ClientException catch (e) {
-      String message = 'Terjadi kesalahan saat login.';
-      if (e.response.containsKey('message')) {
-        message = e.response['message'] as String;
-      } else if (e.response.containsKey('data') && e.response['data'] is Map) {
-        final data = e.response['data'] as Map<String, dynamic>;
-        if (data.containsKey('identity') && data['identity'] is Map) {
-          message = data['identity']['message'] as String? ?? message;
-        } else if (data.containsKey('password') && data['password'] is Map) {
-          message = data['password']['message'] as String? ?? message;
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Email atau password salah. Silakan coba lagi.';
+          });
         }
       }
-      setState(() {
-        _errorMessage = message;
-      });
-      print(
-          'Login error (ClientException): ${e.response}'); // Consider using a proper logger
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Terjadi kesalahan tidak terduga: $e';
-      });
-      print('Unexpected login error: $e'); // Consider using a proper logger
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Terjadi kesalahan tidak terduga: $e';
+        });
+      }
+      print('Unexpected login error: $e');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -202,8 +206,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   child: _isLoading
                       ? const CircularProgressIndicator(
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                         )
                       : const Text(
                           'Login',
@@ -216,8 +219,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                        builder: (_) =>
-                            const RegisterScreen()), // Menggunakan RegisterScreen
+                      builder: (_) => const RegisterScreen(),
+                    ),
                   );
                 },
                 child: Text(

@@ -16,12 +16,16 @@ dependencies:
   geolocator: ^8.0.1
   geocoding: ^2.0.4
   http: ^0.13.6
-  pocketbase: ^0.9.1
   dio: ^5.0.0
   image_picker_web: ^4.0.0
   mime: ^1.0.6
   flutter_map: ^4.0.0
   latlong2: ^0.8.2
+
+  # Pustaka Firebase lengkap untuk migrasi dari PocketBase:
+  firebase_core: ^3.15.2
+  cloud_firestore: ^5.6.12
+  firebase_auth: ^5.7.0  # <-- INI YANG HARUS DITAMBAHKAN AGAR ERROR DI AUTH_SERVICE HILANG
 
 dev_dependencies:
   flutter_test:

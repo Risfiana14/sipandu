@@ -1,55 +1,64 @@
-import 'package:pocketbase/pocketbase.dart';
-
-const String pocketBaseUrl = 'http://159.223.74.55:8090/';
+// lib/services/auth_service.dart
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AuthService {
-  static final PocketBase _pb = PocketBase(pocketBaseUrl);
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  static Future<Map<String, dynamic>> register({
-    required String name,
-    required String email,
-    required String password,
-  }) async {
+  /// Login menggunakan Firebase Authentication
+  Future<User?> loginWithEmailAndPassword(String email, String password) async {
     try {
-      print('Attempting registration at: $pocketBaseUrl');
-      final userData = {
-        'username': name,
-        'email': email,
-        'password': password,
-        'passwordConfirm': password,
-      };
-
-      final record = await _pb.collection('users').create(body: userData);
-
-      return {
-        'success': true,
-        'message': 'Registration successful',
-        'data': record.toJson(),
-      };
-    } on ClientException catch (e) {
-      print('ClientException: ${e.response}');
-      String errorMessage = 'Registration failed. Please try again.';
-      if (e.response['message'] != null) {
-        errorMessage = e.response['message'];
-      } else if (e.response['data'] != null) {
-        final data = e.response['data'] as Map<String, dynamic>;
-        if (data.containsKey('email') && data['email']['message'] != null) {
-          errorMessage = 'Email: ${data['email']['message']}';
-        } else if (data.containsKey('username') &&
-            data['username']['message'] != null) {
-          errorMessage = 'Username: ${data['username']['message']}';
-        }
-      }
-      return {
-        'success': false,
-        'message': errorMessage,
-      };
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      return credential.user;
+    } on FirebaseAuthException catch (e) {
+      print('Login error: ${e.code} - ${e.message}');
+      return null;
     } catch (e) {
-      print('Unexpected error: $e');
-      return {
-        'success': false,
-        'message': 'An unexpected error occurred: $e',
-      };
+      print('Unexpected login error: $e');
+      return null;
     }
   }
+
+  /// Registrasi via Firebase Auth, lalu simpan data tambahan (name, role, dll)
+  /// ke Firestore collection 'users' dengan document ID = uid
+  Future<User?> registerWithEmailAndPassword(
+    String email,
+    String password,
+    Map<String, dynamic> extraData,
+  ) async {
+    try {
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final user = credential.user;
+      if (user != null) {
+        await _db.collection('users').doc(user.uid).set({
+          'email': email,
+          ...extraData,
+        });
+      }
+      return user;
+    } on FirebaseAuthException {
+      // Dilempar ulang supaya register_screen.dart bisa menangani
+      // (e.code == 'email-already-in-use', dsb)
+      rethrow;
+    } catch (e) {
+      print('Unexpected registration error: $e');
+      return null;
+    }
+  }
+
+  /// Logout dari Firebase Auth
+  Future<void> logout() async {
+    await _auth.signOut();
+  }
+
+  /// Ambil user Firebase yang sedang login (kalau perlu di tempat lain)
+  User? get currentUser => _auth.currentUser;
 }

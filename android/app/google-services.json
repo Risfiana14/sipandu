@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "741436438006",
+    "project_id": "sipandu-ea21b",
+    "storage_bucket": "sipandu-ea21b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:741436438006:android:2e6e6f60104fc02abe83d7",
+        "android_client_info": {
+          "package_name": "com.example.sipandu"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCTOVnp4hNQmXdMq0iFYY2PKVXfgkWaDAk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,49 +1,59 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ApiService {
-  // Ganti IP untuk emulator Android (10.0.2.2 = localhost)
-  static const String baseUrl = "http://127.0.0.1:8000/api";
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final String collectionName = 'laporan_masyarakat';
 
-  // Ambil semua laporan
-  static Future<List<dynamic>> getLaporan() async {
-    final url = Uri.parse("$baseUrl/laporan");
+  // 1. MENGAMBIL SEMUA DATA LAPORAN (Read / Fetch)
+  Future<List<Map<String, dynamic>>> getAllReports() async {
+    try {
+      QuerySnapshot querySnapshot = await _db
+          .collection(collectionName)
+          .orderBy('createdAt', descending: true)
+          .get();
 
-    final response = await http.get(url, headers: {
-      'Accept': 'application/json',
-    });
-
-    if (response.statusCode == 200) {
-      try {
-        final jsonData = jsonDecode(response.body);
-        return jsonData['data']; // Sesuaikan dengan response JSON Laravel
-      } catch (e) {
-        throw Exception("Gagal parsing data: $e");
-      }
-    } else {
-      throw Exception("Gagal load data: ${response.statusCode}");
+      return querySnapshot.docs.map((doc) {
+        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id; // Inject ID dokumen Firestore
+        return data;
+      }).toList();
+    } catch (e) {
+      print("Error Fetch Laporan: $e");
+      return [];
     }
   }
 
-  // Tambah laporan
-  static Future<bool> createLaporan(Map<String, dynamic> data) async {
-    final url = Uri.parse("$baseUrl/laporan");
+  // 2. MEMBUAT LAPORAN BARU (Create)
+  Future<bool> createReport(Map<String, dynamic> reportData) async {
+    try {
+      reportData['createdAt'] = FieldValue.serverTimestamp();
+      
+      await _db.collection(collectionName).add(reportData);
+      return true;
+    } catch (e) {
+      print("Error Create Laporan: $e");
+      return false;
+    }
+  }
 
-    final response = await http.post(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: jsonEncode(data),
-    );
+  // 3. UPDATE DATA / STATUS LAPORAN (Update)
+  Future<bool> updateReport(String reportId, Map<String, dynamic> updatedData) async {
+    try {
+      await _db.collection(collectionName).doc(reportId).update(updatedData);
+      return true;
+    } catch (e) {
+      print("Error Update Laporan: $e");
+      return false;
+    }
+  }
 
-    if (response.statusCode == 201 || response.statusCode == 200) {
-      final result = jsonDecode(response.body);
-      return result['success'] == true ||
-          result['message'] == 'Laporan berhasil dibuat';
-    } else {
-      print("Error: ${response.body}");
+  // 4. MENGHAPUS LAPORAN (Delete)
+  Future<bool> deleteReport(String reportId) async {
+    try {
+      await _db.collection(collectionName).doc(reportId).delete();
+      return true;
+    } catch (e) {
+      print("Error Delete Laporan: $e");
       return false;
     }
   }

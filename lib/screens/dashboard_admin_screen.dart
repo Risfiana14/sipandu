@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore menggantikan PocketBase
 import 'package:sipandu/models/report.dart';
 import 'package:sipandu/screens/profile_screen.dart';
 import 'package:sipandu/services/report_service.dart';
 import 'package:sipandu/screens/report_detail_screen.dart';
-import 'package:pocketbase/pocketbase.dart';
-import 'package:sipandu/services/pocketbase_client.dart';
 
 // Asumsi file ini ada di project Anda untuk halaman edit profil
 import 'package:sipandu/screens/edit_profile_screen.dart';
@@ -73,7 +72,6 @@ class AdminReportsView extends StatefulWidget {
 
 class _AdminReportsViewState extends State<AdminReportsView> {
   late Future<List<Report>> _allReportsFuture;
-  final PocketBase _pb = PocketBaseClient.instance;
 
   @override
   void initState() {
@@ -83,6 +81,7 @@ class _AdminReportsViewState extends State<AdminReportsView> {
 
   void _loadAllReports() {
     setState(() {
+      // Pastikan ReportService.getAllReportsForAdmin() di dalamnya sudah disesuaikan memanggil data Firestore
       _allReportsFuture = ReportService.getAllReportsForAdmin();
     });
   }
@@ -123,7 +122,7 @@ class _AdminReportsViewState extends State<AdminReportsView> {
 
   // --- FUNGSI HELPER UNTUK LOGIKA ---
 
-  // PERBAIKAN UTAMA: Menerjemahkan enum ke string yang valid di database
+  // Menerjemahkan enum ke string yang valid di Firebase Firestore
   String _statusEnumToStringForDb(ReportStatus status) {
     switch (status) {
       case ReportStatus.pending:
@@ -144,29 +143,26 @@ class _AdminReportsViewState extends State<AdminReportsView> {
     setState(() => report.status = newStatus); // Optimistic UI update
 
     try {
-      // Gunakan fungsi penerjemah saat mengirim data ke server
-      final body = {'status': _statusEnumToStringForDb(newStatus)};
-      await _pb.collection('laporan').update(report.id, body: body);
+      // Mengubah status dokumen langsung pada koleksi 'laporan_masyarakat' di Firestore
+      await FirebaseFirestore.instance
+          .collection('laporan_masyarakat')
+          .doc(report.id)
+          .update({'status': _statusEnumToStringForDb(newStatus)});
       
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Status laporan "${report.title}" berhasil diubah.'),
         backgroundColor: Colors.green,
       ));
-      // Tidak perlu panggil _loadAllReports() lagi karena UI sudah diupdate
       setState(() {}); 
 
     } catch (e) {
       if (!mounted) return;
-      String errorMessage = 'Gagal mengubah status: $e';
-      if (e is ClientException) {
-        errorMessage = 'Gagal mengubah status: ${e.response['data']}';
-      }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(errorMessage, style: const TextStyle(color: Colors.white)),
+        content: Text('Gagal mengubah status: $e', style: const TextStyle(color: Colors.white)),
         backgroundColor: Colors.red,
       ));
-      setState(() => report.status = oldStatus); // Kembalikan status jika gagal
+      setState(() => report.status = oldStatus); // Kembalikan status asal jika gagal
     }
   }
 
@@ -353,7 +349,6 @@ class _AdminReportsViewState extends State<AdminReportsView> {
   }
 }
 
-
 // ======================================================================
 // HALAMAN PROFIL ADMIN (WRAPPER)
 // ======================================================================
@@ -367,8 +362,6 @@ class AdminProfilePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Profil Admin'),
       ),
-      // Memanggil ProfileScreen yang sudah kita perbaiki agar mandiri
-      // Tidak perlu passing userData lagi
       body: ProfileScreen(),
     );
   }

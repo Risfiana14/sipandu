@@ -1,15 +1,10 @@
-// Hapus 'dart:io', karena tidak kompatibel dengan web.
 import 'dart:typed_data'; // Impor untuk Uint8List (menampilkan gambar baru)
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:pocketbase/pocketbase.dart';
-import 'package:http/http.dart' as http; // Diperlukan untuk http.MultipartFile
-import 'package:sipandu/services/pocketbase_client.dart'; // Sesuaikan path jika perlu
-
-const String pocketBaseUrl = 'http://159.223.74.55:8090/';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore menggantikan PocketBase
 
 class EditProfileScreen extends StatefulWidget {
-  // Data yang diterima dari ProfileScreen adalah Map dari record.toJson()
+  // Data yang diterima dari ProfileScreen adalah Map dari data Firestore
   final Map<String, dynamic> userData;
   final Function(Map<String, dynamic>) onProfileUpdated;
 
@@ -33,7 +28,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   final _formKey = GlobalKey<FormState>();
-  final PocketBase _pb = PocketBaseClient.instance;
   final ImagePicker _picker = ImagePicker();
 
   @override
@@ -65,28 +59,39 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     });
 
     try {
-      final userId = widget.userData['id'] as String;
+      // Mengambil UID dokumen Firestore (mencari fallback field 'uid' atau 'id')
+      final userId = widget.userData['uid'] as String? ?? widget.userData['id'] as String?;
 
-      final body = <String, dynamic>{
+      if (userId == null || userId.isEmpty) {
+        throw Exception("ID Pengguna tidak ditemukan.");
+      }
+
+      // Siapkan Map data untuk diperbarui ke Firestore
+      final updatedData = <String, dynamic>{
         'name': nameController.text.trim(),
-        'phone': int.tryParse(phoneController.text.trim()) ?? 0,
+        'phone': phoneController.text.trim(),
         'address': addressController.text.trim(),
       };
 
-      List<http.MultipartFile> files = [];
+      // Jika ada gambar baru yang dipilih, masukkan referensinya (nama berkas).
+      // Catatan: Jika ingin menyederhanakan unggah gambar di server produksi, 
+      // unggah byte terlebih dahulu ke Firebase Storage dan dapatkan URL-nya.
       if (_selectedImage != null) {
-        files.add(http.MultipartFile.fromBytes(
-          'avatar',
-          await _selectedImage!.readAsBytes(),
-          filename: _selectedImage!.name,
-        ));
+        updatedData['avatar'] = _selectedImage!.name;
+      } else {
+        updatedData['avatar'] = widget.userData['avatar'];
       }
 
-      final record = await _pb
+      // Melakukan pembaruan dokumen langsung pada koleksi 'users' di Firestore
+      await FirebaseFirestore.instance
           .collection('users')
-          .update(userId, body: body, files: files);
+          .doc(userId)
+          .update(updatedData);
 
-      widget.onProfileUpdated(record.toJson());
+      // Gabungkan data lama dengan data baru agar UI ter-refresh dengan benar
+      final newUserData = Map<String, dynamic>.from(widget.userData)..addAll(updatedData);
+      widget.onProfileUpdated(newUserData);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -97,7 +102,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         Navigator.pop(context);
       }
     } catch (e) {
-      if(mounted) {
+      if (mounted) {
         setState(() {
           _errorMessage = 'Gagal memperbarui profil: $e';
         });
@@ -113,16 +118,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    String? currentAvatarUrl;
-    final currentAvatarFileName = widget.userData['avatar'];
-    if (currentAvatarFileName != null && currentAvatarFileName.isNotEmpty) {
-      currentAvatarUrl = _pb
-          .getFileUrl(
-            RecordModel.fromJson(widget.userData),
-            currentAvatarFileName,
-          )
-          .toString();
-    }
+    // Membaca nilai path/URL avatar dari data pengguna
+    final String? currentAvatarUrl = widget.userData['avatar'] as String?;
 
     return Scaffold(
       appBar: AppBar(
@@ -221,10 +218,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           return const Center(child: CircularProgressIndicator());
         },
       );
-    } else if (currentAvatarUrl != null) {
-      return Image.network(currentAvatarUrl, fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) =>
-              const Icon(Icons.person, size: 60));
+    } else if (currentAvatarUrl != null && currentAvatarUrl.isNotEmpty) {
+      // Mendukung pemanggilan gambar jika tersimpan dalam skema tautan URL
+      if (currentAvatarUrl.startsWith('http')) {
+        return Image.network(currentAvatarUrl, fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                const Icon(Icons.person, size: 60));
+      } else {
+        return const Icon(Icons.person, size: 60, color: Colors.grey);
+      }
     } else {
       return const Icon(Icons.person, size: 60, color: Colors.grey);
     }

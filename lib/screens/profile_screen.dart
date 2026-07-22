@@ -1,48 +1,54 @@
 import 'package:flutter/material.dart';
-import 'package:pocketbase/pocketbase.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
 import 'package:sipandu/screens/edit_profile_screen.dart'; // Pastikan path ini benar
-import 'package:sipandu/services/pocketbase_client.dart'; // Pastikan path ini benar
-
-const String pocketBaseUrl = 'http://159.223.74.55:8090/';
 
 // --- PERBAIKAN PADA AUTHSERVICE ---
 class AuthService {
-  static final PocketBase _pb = PocketBaseClient.instance;
+  static final FirebaseAuth _auth = FirebaseAuth.instance;
+  static final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   static Future<void> logout() async {
-    _pb.authStore.clear();
+    await _auth.signOut();
   }
 
   static Future<Map<String, dynamic>?> updateProfile({
     required String id,
     required String name,
-    required int? phone,
+    required String phone,
     required String address,
   }) async {
     try {
       final updatedData = {
-        'id': id,
         'name': name,
         'phone': phone,
         'address': address,
       };
-      // Fungsi update tidak kita ubah agar tidak memengaruhi EditProfileScreen
-      final record = await _pb.collection('users').update(id, body: updatedData);
-      return record.data;
+      
+      // Update data pada dokumen pengguna di Firestore
+      await _db.collection('users').doc(id).update(updatedData);
+      
+      // Kembalikan data map lengkap agar kompatibel
+      updatedData['uid'] = id;
+      return updatedData;
     } catch (e) {
       print('Error updating profile: $e');
       return null;
     }
   }
 
-  // PERUBAIKAN 1: Mengubah return type menjadi RecordModel?
-  // Ini penting agar kita bisa mengakses data lengkap termasuk file.
-  static Future<RecordModel?> getCurrentUserData() async {
+  // Mengubah return type menjadi Map<String, dynamic>? yang diambil dari Firestore
+  static Future<Map<String, dynamic>?> getCurrentUserData() async {
     try {
-      if (_pb.authStore.isValid) {
-        final record = await _pb.collection('users').getOne(_pb.authStore.model.id);
-        print('Fetched user record: $record'); // Debugging
-        return record; // <-- Mengembalikan seluruh RecordModel
+      final User? currentUser = _auth.currentUser;
+      if (currentUser != null) {
+        DocumentSnapshot userDoc = await _db.collection('users').doc(currentUser.uid).get();
+        if (userDoc.exists && userDoc.data() != null) {
+          Map<String, dynamic> data = userDoc.data() as Map<String, dynamic>;
+          data['uid'] = userDoc.id; // Menyisipkan UID dokumen Firestore
+          print('Fetched user record: $data'); // Debugging
+          return data;
+        }
       }
       return null;
     } catch (e) {
@@ -54,7 +60,7 @@ class AuthService {
 
 // --- PERBAIKAN PADA PROFILE SCREEN ---
 class ProfileScreen extends StatefulWidget {
-  // Kita hapus parameter userData dari constructor agar screen ini mandiri
+  // Constructor mandiri tanpa parameter userData kaku
   const ProfileScreen({super.key});
 
   @override
@@ -62,20 +68,18 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // PERUBAIKAN 2: Mengubah tipe state menjadi RecordModel?
-  RecordModel? _userData;
-  bool _isLoading = true; // Langsung set true karena kita akan fetch data
+  // Mengubah tipe state menjadi Map untuk menampung data dokumen Firestore
+  Map<String, dynamic>? _userData;
+  bool _isLoading = true; 
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    // Langsung panggil fungsi untuk memuat data saat screen dibuka
     _loadUserData();
   }
 
   Future<void> _loadUserData() async {
-    // Pastikan state di-set loading
     if (!_isLoading) {
       setState(() {
         _isLoading = true;
@@ -84,11 +88,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final userData = await AuthService.getCurrentUserData();
-      if (mounted) { // Selalu cek 'mounted' sebelum setState di async operation
+      if (mounted) { 
         setState(() {
           if (userData != null) {
             _userData = userData;
-            print('Loaded userData with avatar: ${_userData!.data['avatar']}');
+            print('Loaded userData with avatar: ${_userData!['avatar']}');
           } else {
             _errorMessage = 'Gagal memuat data pengguna';
           }
@@ -115,10 +119,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => EditProfileScreen(
-          // Kirim data sebagai Map agar EditProfileScreen tidak perlu diubah
-          userData: _userData!.toJson(),
+          userData: _userData!,
           onProfileUpdated: (updatedData) {
-            // Saat kembali, muat ulang data dari server untuk memastikan konsistensi
+            // Memuat ulang data dari Firestore untuk memastikan sinkronisasi UI
             _loadUserData();
           },
         ),
@@ -139,14 +142,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         title: const Text('Profil Saya'),
         actions: [
-          // Tambahkan tombol refresh untuk memudahkan debugging
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadUserData,
           ),
         ],
       ),
-      // Tampilkan loading indicator atau profile content
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _userData == null
@@ -156,39 +157,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfileContent() {
-    // Ambil instance PocketBase
-    final pb = PocketBaseClient.instance;
+    final String? avatarUrl = _userData!['avatar'] as String?;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // PERUBAIKAN 3: Menggunakan pb.getFileUrl untuk menampilkan avatar
+          // Menggunakan logika pemuatan gambar dari URL String Firestore
           CircleAvatar(
             radius: 50,
-            backgroundImage: (_userData!.data['avatar'] != null &&
-                    _userData!.data['avatar'].isNotEmpty)
-                ? NetworkImage(
-                    // Membuat URL aman yang berisi token sementara
-                    pb.getFileUrl(_userData!, _userData!.data['avatar']).toString(),
-                  )
+            backgroundColor: Colors.grey[200],
+            backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty && avatarUrl.startsWith('http'))
+                ? NetworkImage(avatarUrl)
                 : null,
-            child: (_userData!.data['avatar'] == null ||
-                    _userData!.data['avatar'].isEmpty)
-                ? const Icon(Icons.person, size: 50)
+            child: (avatarUrl == null || avatarUrl.isEmpty || !avatarUrl.startsWith('http'))
+                ? const Icon(Icons.person, size: 50, color: Colors.grey)
                 : null,
           ),
           const SizedBox(height: 16),
-          // PERUBAIKAN 4: Mengakses data melalui _userData.data['...']
           Text(
-            _userData!.data['name']?.toString() ?? 'Pengguna Sipandu',
+            _userData!['name']?.toString() ?? 'Pengguna Sipandu',
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           Text(
-            _userData!.data['email']?.toString() ?? 'Tidak ada email',
+            _userData!['email']?.toString() ?? 'Tidak ada email',
             style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             textAlign: TextAlign.center,
           ),
@@ -199,17 +194,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               InfoItem(
                 icon: Icons.email,
                 title: 'Email',
-                value: _userData!.data['email']?.toString() ?? 'Tidak diatur',
+                value: _userData!['email']?.toString() ?? 'Tidak diatur',
               ),
               InfoItem(
                 icon: Icons.phone,
                 title: 'Telepon',
-                value: _userData!.data['phone']?.toString() ?? 'Belum diatur',
+                value: _userData!['phone']?.toString() ?? 'Belum diatur',
               ),
               InfoItem(
                 icon: Icons.home,
                 title: 'Alamat',
-                value: _userData!.data['address']?.toString() ?? 'Belum diatur',
+                value: _userData!['address']?.toString() ?? 'Belum diatur',
               ),
             ],
           ),
@@ -219,18 +214,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             items: [
               InfoItem(
                 icon: Icons.verified_user,
-                title: 'ID Pengguna',
-                value: _userData!.id, // ID bisa diakses langsung
+                title: 'ID Pengguna (UID)',
+                value: _userData!['uid']?.toString() ?? 'Tidak ada ID', 
               ),
               InfoItem(
                 icon: Icons.check_circle,
-                title: 'Terverifikasi',
-                value: _userData!.data['verified'] == true ? 'Ya' : 'Tidak',
-              ),
-              InfoItem(
-                icon: Icons.visibility,
-                title: 'Email Visibilitas',
-                value: _userData!.data['emailVisibility'] == true ? 'Publik' : 'Pribadi',
+                title: 'Role / Peran',
+                value: (_userData!['role']?.toString() ?? 'user').toUpperCase(),
               ),
             ],
           ),
@@ -262,9 +252,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildInfoCard(
-      {required String title, required List<InfoItem> items}) {
-    // Widget ini tidak perlu diubah
+  Widget _buildInfoCard({required String title, required List<InfoItem> items}) {
     return Card(
       elevation: 2,
       child: Padding(
@@ -304,7 +292,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 class InfoItem {
-  // Class ini tidak perlu diubah
   final IconData icon;
   final String title;
   final String value;

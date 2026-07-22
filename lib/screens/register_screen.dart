@@ -1,7 +1,8 @@
 // lib/screens/register_screen.dart
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Impor Firebase Auth
 import 'package:sipandu/screens/login_screen.dart';
-import 'package:sipandu/services/pocketbase_service.dart';
+import 'package:sipandu/services/auth_service.dart'; // Impor AuthService Firebase baru
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -16,6 +17,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
+  
+  final AuthService _authService = AuthService(); // Membuat instance dari AuthService Firebase
+  
   bool _isLoading = false;
   String? _errorMessage;
   bool _obscurePassword = true;
@@ -55,37 +59,54 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      final result = await PocketBaseService.register(
-        name: nameController.text.trim(),
-        email: emailController.text.trim(),
-        password: passwordController.text,
+      // Memanggil fungsi register bawaan Firebase yang sudah kita buat di auth_service.dart
+      User? user = await _authService.registerWithEmailAndPassword(
+        emailController.text.trim(),
+        passwordController.text,
+        {
+          'name': nameController.text.trim(),
+          'role': 'user', // Otomatis mendaftarkan sebagai role standar 'user'
+        },
       );
 
-      if (result['success'] == true) {
-        // Navigate to LoginScreen after successful registration
+      if (user != null) {
+        if (!mounted) return;
+        // Pindah ke Halaman Login setelah berhasil mendaftar
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => const LoginScreen(
-                fromRegister: true), // Pass fromRegister: true
+            builder: (context) => const LoginScreen(fromRegister: true),
           ),
         );
       } else {
+        if (!mounted) return;
         setState(() {
-          _errorMessage =
-              result['message'] ?? 'Registrasi gagal. Silakan coba lagi.';
+          _errorMessage = 'Registrasi gagal. Pastikan data benar atau email belum terdaftar.';
         });
       }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        if (e.code == 'email-already-in-use') {
+          _errorMessage = 'Email tersebut sudah terdaftar.';
+        } else if (e.code == 'invalid-email') {
+          _errorMessage = 'Format penulisan email salah.';
+        } else {
+          _errorMessage = e.message ?? 'Terjadi kesalahan sistem Auth.';
+        }
+      });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _errorMessage =
-            'Terjadi kesalahan jaringan atau server. Periksa koneksi internet Anda atau coba lagi nanti.';
+        _errorMessage = 'Terjadi kesalahan jaringan atau server. Silakan coba lagi nanti.';
       });
-      print('Registration error: $e'); // Consider using a proper logger
+      print('Registration error: $e');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

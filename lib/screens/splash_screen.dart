@@ -1,41 +1,40 @@
 import 'package:flutter/material.dart';
-import 'package:pocketbase/pocketbase.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth menggantikan PocketBase
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore untuk ambil data pengguna
 import 'package:sipandu/screens/home_screen.dart';
 import 'package:sipandu/screens/login_screen.dart';
-import 'package:sipandu/services/pocketbase_client.dart'; // Ensure this is imported
 
 class AuthService {
+  static final FirebaseAuth _auth = FirebaseAuth.instance;
+  static final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  static final PocketBase _pb = PocketBaseClient.instance;
-
+  // Cek apakah pengguna sudah memiliki sesi login aktif di Firebase
   static Future<bool> isLoggedIn() async {
     try {
-      await _pb.collection('users').authRefresh();
-      return _pb.authStore.isValid;
-    } on ClientException catch (e) {
-      // Catch PocketBase specific exceptions (e.g., 401 Unauthorized)
-      print('Auth refresh client error: ${e.response}');
-      return false;
+      final User? currentUser = _auth.currentUser;
+      return currentUser != null;
     } catch (e) {
-      print('Auth check error: $e'); // General error
+      print('Auth check error: $e'); 
       return false;
     }
   }
 
+  // Mengambil data pengguna dari Firestore berdasarkan UID saat ini
   static Future<Map<String, dynamic>?> getUserData() async {
     try {
-      if (_pb.authStore.isValid && _pb.authStore.model != null) {
-        final record =
-            await _pb.collection('users').getOne(_pb.authStore.model.id);
-        print('Fetched user record: ${record.data}');
-        return record.data;
+      final User? currentUser = _auth.currentUser;
+      if (currentUser != null) {
+        DocumentSnapshot userDoc = await _db.collection('users').doc(currentUser.uid).get();
+        if (userDoc.exists && userDoc.data() != null) {
+          Map<String, dynamic> data = userDoc.data() as Map<String, dynamic>;
+          data['uid'] = userDoc.id; // Menyisipkan UID dokumen Firestore
+          print('Fetched user record: $data');
+          return data;
+        }
       }
       return null;
-    } on ClientException catch (e) {
-      print('Error fetching user data (ClientException): ${e.response}');
-      return null;
     } catch (e) {
-      print('Error fetching user data: $e');
+      print('Error fetching user data from Firestore: $e');
       return null;
     }
   }
@@ -58,10 +57,10 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _checkAuth() async {
     await Future.delayed(const Duration(seconds: 2)); // Splash screen delay
 
-    final isLoggedIn = await AuthService.isLoggedIn();
+    final bool loggedIn = await AuthService.isLoggedIn();
 
     if (mounted) {
-      if (isLoggedIn) {
+      if (loggedIn) {
         final userData = await AuthService.getUserData();
         Navigator.pushReplacement(
           context,
@@ -74,7 +73,6 @@ class _SplashScreenState extends State<SplashScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            // Corrected: Pass the 'fromRegister' parameter to LoginScreen
             builder: (context) => const LoginScreen(fromRegister: false),
           ),
         );
@@ -90,16 +88,16 @@ class _SplashScreenState extends State<SplashScreen> {
         decoration: const BoxDecoration(
           color: Colors.blue,
         ),
-        child: Column(
+        child: const Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.account_balance,
               size: 80,
               color: Colors.white,
             ),
-            const SizedBox(height: 20),
-            const Text(
+            SizedBox(height: 20),
+            Text(
               'SIPANDU',
               style: TextStyle(
                 fontSize: 32,
@@ -107,16 +105,16 @@ class _SplashScreenState extends State<SplashScreen> {
                 color: Colors.white,
               ),
             ),
-            const SizedBox(height: 10),
-            const Text(
+            SizedBox(height: 10),
+            Text(
               'Aplikasi Sistem Pelayanan Terpadu',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.white,
               ),
             ),
-            const SizedBox(height: 40),
-            const CircularProgressIndicator(
+            SizedBox(height: 40),
+            CircularProgressIndicator(
               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
             ),
           ],

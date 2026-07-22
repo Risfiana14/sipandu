@@ -1,11 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:sipandu/screens/splash_screen.dart';
-import 'package:sipandu/screens/login_screen.dart';
-import 'package:sipandu/screens/register_screen.dart';
-// import 'package:sipandu/screens/profile_screen.dart'; // Unused import - commented out or remove
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+// Impor berkas SplashScreen asli Anda
+import 'package:sipandu/screens/splash_screen.dart'; 
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  if (kIsWeb) {
+    // Konfigurasi Firebase khusus platform Web/Chrome agar tidak memicu error null
+    await Firebase.initializeApp(
+      options: const FirebaseOptions(
+        apiKey: "AIzaSyYourAPIKeyHere_SalinDariFirebaseConsole",
+        appId: "1:your:web:appId",
+        messagingSenderId: "your_sender_id",
+        projectId: "sipandu",
+        storageBucket: "sipandu.appspot.com",
+      ),
+    );
+  } else {
+    // Konfigurasi otomatis untuk Android (Membaca berkas google-services.json)
+    await Firebase.initializeApp();
+  }
+
   runApp(const MyApp());
 }
 
@@ -15,36 +32,14 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Sipandu',
-      debugShowCheckedModeBanner: false,
+      title: 'SiPandu',
+      debugShowCheckedModeBanner: false, // Menghilangkan pita DEBUG di pojok kanan atas
       theme: ThemeData(
-        fontFamily: 'Poppins',
+        primarySwatch: Colors.blue,
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
-          secondary: Colors.green,
-        ),
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-          elevation: 0,
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          titleTextStyle: TextStyle(
-            fontFamily: 'Poppins',
-            fontWeight: FontWeight.w600,
-            fontSize: 18,
-            color: Colors.black,
-          ),
-        ),
       ),
-      initialRoute: '/splash',
-      routes: {
-        '/splash': (context) => const SplashScreen(),
-        // Pass fromRegister: false as it's not coming from registration directly
-        '/login': (context) => const LoginScreen(fromRegister: false),
-        '/register': (context) => const RegisterScreen(),
-        // '/profile': (context) => const ProfileScreen(), // Uncomment if you use this route
-      },
+      // KEMBALIKAN KE SCREEN AWAL ASLI ANDA
+      home: const SplashScreen(), 
     );
   }
 }
