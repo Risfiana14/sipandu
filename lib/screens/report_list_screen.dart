@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:sipandu/models/report.dart';
 import 'package:sipandu/screens/report_detail_screen.dart';
-import 'package:sipandu/services/report_service.dart';
+import 'package:sipandu/services/api_service.dart'; // Menggunakan ApiService Firebase
 
 class ReportListScreen extends StatefulWidget {
   const ReportListScreen({super.key});
@@ -13,6 +13,7 @@ class ReportListScreen extends StatefulWidget {
 
 class _ReportListScreenState extends State<ReportListScreen> {
   late Future<List<Report>> _reportsFuture;
+  final ApiService _apiService = ApiService(); // Instance ApiService Firebase
 
   @override
   void initState() {
@@ -20,14 +21,15 @@ class _ReportListScreenState extends State<ReportListScreen> {
     _refreshReports();
   }
 
-  // Menggunakan setState di dalam _refreshReports untuk memastikan UI diperbarui
   void _refreshReports() {
     setState(() {
-      _reportsFuture = ReportService.getUserReports();
+      // Mengambil data dari Firebase lewat ApiService dan dikonversi ke model objek Report
+      _reportsFuture = _apiService.getAllReports().then((rawList) {
+        return rawList.map((mapData) => Report.fromJson(mapData)).toList();
+      });
     });
   }
 
-  // PERBAIKAN 1: Tambahkan case untuk ReportStatus.unknown
   Color _getStatusColor(ReportStatus status) {
     switch (status) {
       case ReportStatus.pending:
@@ -38,12 +40,11 @@ class _ReportListScreenState extends State<ReportListScreen> {
         return Colors.green;
       case ReportStatus.rejected:
         return Colors.red;
-      case ReportStatus.unknown: // <-- TAMBAHKAN INI
+      case ReportStatus.unknown:
         return Colors.grey;
     }
   }
 
-  // PERBAIKAN 2: Tambahkan case untuk ReportStatus.unknown
   String _getStatusText(ReportStatus status) {
     switch (status) {
       case ReportStatus.pending:
@@ -54,12 +55,11 @@ class _ReportListScreenState extends State<ReportListScreen> {
         return 'Selesai';
       case ReportStatus.rejected:
         return 'Ditolak';
-      case ReportStatus.unknown: // <-- TAMBAHKAN INI
+      case ReportStatus.unknown:
         return 'Tidak Diketahui';
     }
   }
 
-  // Widget ini sudah benar karena menerima URL lengkap dari ReportService
   Widget _buildThumbnail(List<String> images) {
     if (images.isEmpty) {
       return Container(
@@ -183,13 +183,11 @@ class _ReportListScreenState extends State<ReportListScreen> {
                   elevation: 2,
                   child: InkWell(
                     onTap: () async {
-                      // Navigasi ke detail, dan refresh saat kembali jika perlu
                       final result = await Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => ReportDetailScreen(reportId: report.id),
                         ),
                       );
-                      // Jika halaman detail mengembalikan true, berarti ada update status
                       if (result == true) {
                         _refreshReports();
                       }
@@ -211,7 +209,7 @@ class _ReportListScreenState extends State<ReportListScreen> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: _getStatusColor(report.status).withOpacity(0.2),
+                                        color: _getStatusColor(report.status).withAlpha(51), // Menggunakan dengan .withAlpha()
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Text(

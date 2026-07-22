@@ -1,7 +1,7 @@
 // lib/screens/report_detail_screen.dart
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:sipandu/models/report.dart';
-import 'package:sipandu/services/report_service.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -25,18 +25,34 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   }
 
   void _loadReport() {
-    _reportFuture = ReportService.getReportDetails(widget.reportId);
-    _reportFuture.then((report) {
+    // Mengambil dokumen laporan langsung dari koleksi 'laporan_masyarakat' di Firestore
+    _reportFuture = FirebaseFirestore.instance
+        .collection('laporan_masyarakat')
+        .doc(widget.reportId)
+        .get()
+        .then((doc) {
+      if (!doc.exists) {
+        throw Exception("Laporan tidak ditemukan.");
+      }
+      
+      Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+      data['id'] = doc.id; // Menyisipkan document ID ke dalam Map data
+      
+      Report report = Report.fromJson(data);
+
+      // Mengatur kamera peta ke lokasi laporan
       if (report.location.latitude != 0.0 || report.location.longitude != 0.0) {
         _mapController.move(report.location, 15.0);
       } else {
         print('Lokasi laporan 0,0. Peta tidak akan di-center ke lokasi ini.');
-        // Set ke lokasi default (misalnya Malang) jika lokasi 0,0
-        _mapController.move(
-            LatLng(-7.9666, 112.6333), 10.0); // Koordinat Malang
+        // Set ke lokasi default (Surabaya) jika lokasi 0,0
+        _mapController.move(LatLng(-7.2575, 112.7521), 10.0);
       }
+      
+      return report;
     }).catchError((error) {
       print('Error loading report for map: $error');
+      throw error;
     });
   }
 
@@ -50,7 +66,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         return Colors.green;
       case ReportStatus.rejected:
         return Colors.red;
-      default: // Menambahkan default case untuk menangani nilai null/unexpected
+      default:
         return Colors.grey;
     }
   }
@@ -65,14 +81,12 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         return 'Selesai';
       case ReportStatus.rejected:
         return 'Ditolak';
-      default: // Menambahkan default case
+      default:
         return 'Tidak Diketahui';
     }
   }
 
-  // >>>>>> PASTIKAN WIDGET INI MENGAMBIL URL LENGKAP <<<<<<
   Widget _buildImage(String imageUrl) {
-    // Debugging: Print URL untuk verifikasi
     print('Loading image: $imageUrl');
     return Image.network(
       imageUrl,
@@ -89,7 +103,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         );
       },
       errorBuilder: (context, error, stackTrace) {
-        // Debugging: Print error saat loading gambar
         print('Error loading image $imageUrl: $error');
         return const Center(
           child: Icon(Icons.broken_image, size: 40, color: Colors.grey),
@@ -149,7 +162,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: _getStatusColor(report.status).withOpacity(0.2),
+                        color: _getStatusColor(report.status).withAlpha(51), // Menggunakan dengan .withAlpha()
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(

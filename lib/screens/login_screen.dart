@@ -1,10 +1,11 @@
+// lib/screens/login_screen.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:sipandu/screens/home_screen.dart';
 import 'package:sipandu/screens/dashboard_admin_screen.dart';
 import 'package:sipandu/screens/register_screen.dart';
-import 'package:sipandu/services/auth_service.dart'; // Impor AuthService baru
+import 'package:sipandu/services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   final bool fromRegister;
@@ -17,7 +18,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final AuthService _authService = AuthService(); // Instance dari AuthService (Benar, bukan static)
+  final AuthService _authService = AuthService(); // Instance dari AuthService Firebase
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -90,7 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
         } else {
           if (mounted) {
             setState(() {
-              _errorMessage = 'Data pengguna tidak ditemukan di database.';
+              _errorMessage = 'Data profil pengguna tidak ditemukan di database.';
             });
           }
           await _authService.logout();
@@ -101,6 +102,20 @@ class _LoginScreenState extends State<LoginScreen> {
             _errorMessage = 'Email atau password salah. Silakan coba lagi.';
           });
         }
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        setState(() {
+          if (e.code == 'user-not-found') {
+            _errorMessage = 'Akun email tidak terdaftar.';
+          } else if (e.code == 'wrong-password') {
+            _errorMessage = 'Password yang Anda masukkan salah.';
+          } else if (e.code == 'invalid-email') {
+            _errorMessage = 'Format email tidak valid.';
+          } else {
+            _errorMessage = e.message ?? 'Gagal masuk. Autentikasi bermasalah.';
+          }
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -194,19 +209,24 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               SizedBox(
                 width: double.infinity,
+                height: 50,
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _login,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                   child: _isLoading
-                      ? const CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
                         )
                       : const Text(
                           'Login',

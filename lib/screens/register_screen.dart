@@ -59,7 +59,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      // Memanggil fungsi register bawaan Firebase yang sudah kita buat di auth_service.dart
+      // Memanggil fungsi register Firebase bawaan dari auth_service.dart
       User? user = await _authService.registerWithEmailAndPassword(
         emailController.text.trim(),
         passwordController.text,

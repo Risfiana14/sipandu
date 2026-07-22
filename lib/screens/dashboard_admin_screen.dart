@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore menggantikan PocketBase
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 import 'package:sipandu/models/report.dart';
 import 'package:sipandu/screens/profile_screen.dart';
-import 'package:sipandu/services/report_service.dart';
+import 'package:sipandu/services/api_service.dart'; // Menggunakan ApiService Firebase
 import 'package:sipandu/screens/report_detail_screen.dart';
-
-// Asumsi file ini ada di project Anda untuk halaman edit profil
 import 'package:sipandu/screens/edit_profile_screen.dart';
 
 // ======================================================================
@@ -72,6 +70,7 @@ class AdminReportsView extends StatefulWidget {
 
 class _AdminReportsViewState extends State<AdminReportsView> {
   late Future<List<Report>> _allReportsFuture;
+  final ApiService _apiService = ApiService(); // Instance ApiService Firebase
 
   @override
   void initState() {
@@ -81,8 +80,10 @@ class _AdminReportsViewState extends State<AdminReportsView> {
 
   void _loadAllReports() {
     setState(() {
-      // Pastikan ReportService.getAllReportsForAdmin() di dalamnya sudah disesuaikan memanggil data Firestore
-      _allReportsFuture = ReportService.getAllReportsForAdmin();
+      // Memanggil fungsi Firebase dari api_service.dart lalu memetakan Map data ke model objek Report
+      _allReportsFuture = _apiService.getAllReports().then((rawList) {
+        return rawList.map((mapData) => Report.fromJson(mapData)).toList();
+      });
     });
   }
 
@@ -143,11 +144,12 @@ class _AdminReportsViewState extends State<AdminReportsView> {
     setState(() => report.status = newStatus); // Optimistic UI update
 
     try {
-      // Mengubah status dokumen langsung pada koleksi 'laporan_masyarakat' di Firestore
-      await FirebaseFirestore.instance
-          .collection('laporan_masyarakat')
-          .doc(report.id)
-          .update({'status': _statusEnumToStringForDb(newStatus)});
+      // Mengubah status dokumen menggunakan ApiService yang sudah kita miliki
+      bool success = await _apiService.updateReport(report.id, {
+        'status': _statusEnumToStringForDb(newStatus),
+      });
+      
+      if (!success) throw Exception("Gagal memperbarui status di server.");
       
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -307,7 +309,7 @@ class _AdminReportsViewState extends State<AdminReportsView> {
                                     horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
                                     color: _getStatusColor(report.status)
-                                        .withOpacity(0.2),
+                                        .withAlpha(51), // Menggantikan dengan withAlpha untuk menghindari kemunduran versi
                                     borderRadius: BorderRadius.circular(12)),
                                 child: Text(_getStatusText(report.status).toUpperCase(),
                                     style: TextStyle(
@@ -362,7 +364,7 @@ class AdminProfilePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Profil Admin'),
       ),
-      body: ProfileScreen(),
+      body: const ProfileScreen(), // Ditambahkan kata kunci const
     );
   }
 }
