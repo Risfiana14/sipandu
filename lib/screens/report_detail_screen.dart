@@ -21,16 +21,18 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _loadReport();
+    // Inisialisasi Future langsung saat state pertama kali dibuat
+    _reportFuture = _loadReportData();
   }
 
-  void _loadReport() {
-    // Mengambil dokumen laporan langsung dari koleksi 'laporan_masyarakat' di Firestore
-    _reportFuture = FirebaseFirestore.instance
-        .collection('laporan_masyarakat')
-        .doc(widget.reportId)
-        .get()
-        .then((doc) {
+  Future<Report> _loadReportData() async {
+    try {
+      // Mengambil dokumen laporan langsung dari koleksi 'laporan_masyarakat' di Firestore
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('laporan_masyarakat')
+          .doc(widget.reportId)
+          .get();
+
       if (!doc.exists) {
         throw Exception("Laporan tidak ditemukan.");
       }
@@ -40,20 +42,27 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       
       Report report = Report.fromJson(data);
 
-      // Mengatur kamera peta ke lokasi laporan
+      // Mengatur kamera peta ke lokasi laporan secara aman setelah objek MapController siap
       if (report.location.latitude != 0.0 || report.location.longitude != 0.0) {
-        _mapController.move(report.location, 15.0);
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _mapController.move(report.location, 15.0);
+          }
+        });
       } else {
         print('Lokasi laporan 0,0. Peta tidak akan di-center ke lokasi ini.');
-        // Set ke lokasi default (Surabaya) jika lokasi 0,0
-        _mapController.move(LatLng(-7.2575, 112.7521), 10.0);
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _mapController.move(LatLng(-7.2575, 112.7521), 10.0); // Default Surabaya
+          }
+        });
       }
       
       return report;
-    }).catchError((error) {
+    } catch (error) {
       print('Error loading report for map: $error');
-      throw error;
-    });
+      rethrow;
+    }
   }
 
   Color _getStatusColor(ReportStatus status) {
@@ -140,7 +149,11 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                   Text('Terjadi kesalahan: ${snapshot.error}'),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () => setState(() => _loadReport()),
+                    onPressed: () {
+                      setState(() {
+                        _reportFuture = _loadReportData();
+                      });
+                    },
                     child: const Text('Coba Lagi'),
                   ),
                 ],
@@ -162,7 +175,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: _getStatusColor(report.status).withAlpha(51), // Menggunakan dengan .withAlpha()
+                        color: _getStatusColor(report.status).withAlpha(51),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
