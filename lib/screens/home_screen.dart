@@ -62,11 +62,47 @@ class _HomeScreenState extends State<HomeScreen> {
             itemCount: reports.length > 5 ? 5 : reports.length, // Tampilkan 5 laporan terbaru
             itemBuilder: (context, index) {
               final report = reports[index];
+              
+              // Cek apakah ada gambar di dalam list images laporan
+              final hasImage = report.images.isNotEmpty && report.images.first.toLowerCase().startsWith('http');
+
               return Card(
+                margin: const EdgeInsets.symmetric(vertical: 8),
                 child: ListTile(
-                  title: Text(report.title),
-                  subtitle: Text(report.description),
-                  trailing: Text(report.formattedDate),
+                  contentPadding: const EdgeInsets.all(12),
+                  // Menambahkan Leading Widget untuk menampilkan gambar di Halaman Utama
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      color: Colors.grey[200],
+                      child: hasImage
+                          ? Image.network(
+                              report.images.first,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(Icons.broken_image, color: Colors.grey);
+                              },
+                            )
+                          : const Icon(Icons.image, color: Colors.grey),
+                    ),
+                  ),
+                  title: Text(
+                    report.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    report.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: Text(
+                    report.formattedDate,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(

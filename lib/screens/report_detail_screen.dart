@@ -1,4 +1,3 @@
-// lib/screens/report_detail_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:sipandu/models/report.dart';
@@ -21,13 +20,11 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   @override
   void initState() {
     super.initState();
-    // Inisialisasi Future langsung saat state pertama kali dibuat
     _reportFuture = _loadReportData();
   }
 
   Future<Report> _loadReportData() async {
     try {
-      // Mengambil dokumen laporan langsung dari koleksi 'laporan_masyarakat' di Firestore
       DocumentSnapshot doc = await FirebaseFirestore.instance
           .collection('laporan_masyarakat')
           .doc(widget.reportId)
@@ -38,11 +35,10 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       }
       
       Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-      data['id'] = doc.id; // Menyisipkan document ID ke dalam Map data
+      data['id'] = doc.id; 
       
       Report report = Report.fromJson(data);
 
-      // Mengatur kamera peta ke lokasi laporan secara aman setelah objek MapController siap
       if (report.location.latitude != 0.0 || report.location.longitude != 0.0) {
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) {
@@ -50,7 +46,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
           }
         });
       } else {
-        print('Lokasi laporan 0,0. Peta tidak akan di-center ke lokasi ini.');
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) {
             _mapController.move(LatLng(-7.2575, 112.7521), 10.0); // Default Surabaya
@@ -96,7 +91,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   }
 
   Widget _buildImage(String imageUrl) {
-    print('Loading image: $imageUrl');
     return Image.network(
       imageUrl,
       fit: BoxFit.cover,
@@ -112,7 +106,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         );
       },
       errorBuilder: (context, error, stackTrace) {
-        print('Error loading image $imageUrl: $error');
         return const Center(
           child: Icon(Icons.broken_image, size: 40, color: Colors.grey),
         );
@@ -168,14 +161,12 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Status dan Tanggal
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: _getStatusColor(report.status).withAlpha(51),
+                        color: _getStatusColor(report.status).withOpacity(0.15),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -195,16 +186,13 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Judul dan Kategori
                 Text(
                   report.title,
-                  style: const TextStyle(
-                      fontSize: 24, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.grey[200],
                     borderRadius: BorderRadius.circular(12),
@@ -216,7 +204,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Deskripsi
                 const Text(
                   'Deskripsi',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -225,7 +212,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 Text(report.description),
                 const SizedBox(height: 24),
 
-                // Gambar
                 const Text(
                   'Gambar',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -256,7 +242,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Lokasi (Peta)
                 const Text(
                   'Lokasi',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -274,13 +259,11 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                       options: MapOptions(
                         center: report.location,
                         zoom: 15.0,
-                        interactiveFlags:
-                            InteractiveFlag.all & ~InteractiveFlag.rotate,
+                        interactiveFlags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                       ),
                       children: [
                         TileLayer(
-                          urlTemplate:
-                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                           userAgentPackageName: 'id.app.sipandu',
                         ),
                         MarkerLayer(
@@ -308,7 +291,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                         style: Theme.of(context).textTheme.bodySmall)),
                 const SizedBox(height: 24),
 
-                // Tanggapan
                 if (report.response != null && report.response!.isNotEmpty) ...[
                   const Text(
                     'Tanggapan',

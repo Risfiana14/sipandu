@@ -1,6 +1,6 @@
 // lib/models/report.dart
 import 'package:latlong2/latlong.dart';
-// import 'package:sipandu/models/user_data.dart'; // Hilangkan komentar jika Anda punya model UserData
+import 'package:cloud_firestore/cloud_firestore.dart'; // DIJAMIN PERLU UNTUK PARSING TIMESTAMP
 
 // Model sederhana untuk data user yang di-expand
 class ReporterData {
@@ -19,13 +19,12 @@ class ReporterData {
   }
 }
 
-
 enum ReportStatus {
   pending,
   inProcess,
   resolved,
   rejected,
-  unknown, // Tambahkan status unknown untuk fallback
+  unknown,
 }
 
 class Report {
@@ -34,13 +33,12 @@ class Report {
   final String title;
   final String category;
   final String description;
-  final List<String> images; // Ini akan berisi FULL URLs dari ReportService
+  final List<String> images; // Berisi URL penuh hasil konversi
   final LatLng location;
   ReportStatus status;
   final DateTime created;
-  final DateTime updated;
   final String? response;
-  final ReporterData? reporter; // Opsional: untuk menampung data user dari 'expand'
+  final ReporterData? reporter;
 
   Report({
     required this.id,
@@ -52,13 +50,12 @@ class Report {
     required this.location,
     required this.status,
     required this.created,
-    required this.updated,
     this.response,
     this.reporter,
   });
 
   factory Report.fromJson(Map<String, dynamic> json) {
-    // --- Parsing Lokasi ---
+    // --- 1. Parsing Lokasi ---
     LatLng parsedLocation;
     final locData = json['lokasi'];
     if (locData is Map && locData['latitude'] != null && locData['longitude'] != null) {
@@ -67,7 +64,32 @@ class Report {
         (locData['longitude'] as num).toDouble(),
       );
     } else {
-      parsedLocation = LatLng(0.0, 0.0); // Fallback location
+      parsedLocation = LatLng(0.0, 0.0);
+    }
+
+    // --- 2. Parsing & Konversi Gambar ---
+    // Mengambil field 'gambar_list' sesuai struktur data di Firestore
+    final rawImages = json['gambar_list'] as List<dynamic>? ?? [];
+    
+    List<String> parsedUrls = rawImages.map((item) {
+      String fileName = item.toString().trim();
+      
+      if (fileName.isEmpty) return '';
+      if (fileName.startsWith('http')) return fileName;
+      
+      // Mengubah nama file mentah menjadi URL valid Firebase Storage
+      String bucketName = "sipandu-app.appspot.com"; 
+      return "https://firebasestorage.googleapis.com/v0/b/$bucketName/o/${Uri.encodeComponent(fileName)}?alt=media";
+    }).where((url) => url.isNotEmpty).toList();
+
+    // --- 3. Parsing Timestamp Firestore ke DateTime ---
+    DateTime parsedCreated = DateTime.now();
+    if (json['createdAt'] != null) {
+      if (json['createdAt'] is Timestamp) {
+        parsedCreated = (json['createdAt'] as Timestamp).toDate();
+      } else if (json['createdAt'] is String) {
+        parsedCreated = DateTime.tryParse(json['createdAt']) ?? DateTime.now();
+      }
     }
 
     return Report(
@@ -76,13 +98,11 @@ class Report {
       title: json['judul'] ?? 'Tanpa Judul',
       category: json['kategori'] ?? 'Lainnya',
       description: json['deskripsi'] ?? 'Tidak ada deskripsi.',
-      images: List<String>.from(json['gambar'] ?? []), // Langsung cast ke List<String>
+      images: parsedUrls, 
       location: parsedLocation,
       status: _parseReportStatus(json['status'] ?? ''),
-      created: DateTime.tryParse(json['created'] ?? '') ?? DateTime.now(),
-      updated: DateTime.tryParse(json['updated'] ?? '') ?? DateTime.now(),
+      created: parsedCreated,
       response: json['tanggapan'],
-      // Jika ada data user dari expand, parse juga
       reporter: json.containsKey('user_data')
           ? ReporterData.fromJson(json['user_data'])
           : null,
@@ -105,7 +125,6 @@ class Report {
   }
 
   String get formattedDate {
-    // Format tanggal menjadi: 19/6/2025
     return "${created.day}/${created.month}/${created.year}";
   }
 
