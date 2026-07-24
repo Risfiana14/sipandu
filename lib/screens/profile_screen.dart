@@ -157,100 +157,93 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfileContent() {
-    final String? avatarUrl = _userData!['avatar'] as String?;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Menggunakan logika pemuatan gambar dari URL String Firestore
-          CircleAvatar(
-            radius: 50,
-            backgroundColor: Colors.grey[200],
-            backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty && avatarUrl.startsWith('http'))
-                ? NetworkImage(avatarUrl)
-                : null,
-            child: (avatarUrl == null || avatarUrl.isEmpty || !avatarUrl.startsWith('http'))
-                ? const Icon(Icons.person, size: 50, color: Colors.grey)
-                : null,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _userData!['name']?.toString() ?? 'Pengguna Sipandu',
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _userData!['email']?.toString() ?? 'Tidak ada email',
-            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          _buildInfoCard(
-            title: 'Informasi Kontak',
-            items: [
-              InfoItem(
-                icon: Icons.email,
-                title: 'Email',
-                value: _userData!['email']?.toString() ?? 'Tidak diatur',
-              ),
-              InfoItem(
-                icon: Icons.phone,
-                title: 'Telepon',
-                value: _userData!['phone']?.toString() ?? 'Belum diatur',
-              ),
-              InfoItem(
-                icon: Icons.home,
-                title: 'Alamat',
-                value: _userData!['address']?.toString() ?? 'Belum diatur',
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _buildInfoCard(
-            title: 'Informasi Akun',
-            items: [
-              InfoItem(
-                icon: Icons.verified_user,
-                title: 'ID Pengguna (UID)',
-                value: _userData!['uid']?.toString() ?? 'Tidak ada ID', 
-              ),
-              InfoItem(
-                icon: Icons.check_circle,
-                title: 'Role / Peran',
-                value: (_userData!['role']?.toString() ?? 'user').toUpperCase(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          if (_errorMessage != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 20),
-              child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+  return SingleChildScrollView(
+    padding: const EdgeInsets.all(16.0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // MENGGUNAKAN IKON DEFAULT TANPA FOTO PROFILE
+        CircleAvatar(
+          radius: 50,
+          backgroundColor: Colors.blue.shade100,
+          child: Icon(Icons.person, size: 50, color: Colors.blue.shade700),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          _userData!['name']?.toString() ?? 'Pengguna Sipandu',
+          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _userData!['email']?.toString() ?? 'Tidak ada email',
+          style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 24),
+        _buildInfoCard(
+          title: 'Informasi Kontak',
+          items: [
+            InfoItem(
+              icon: Icons.email,
+              title: 'Email',
+              value: _userData!['email']?.toString() ?? 'Tidak diatur',
             ),
-          ElevatedButton.icon(
-            onPressed: _navigateToEditProfile,
-            icon: const Icon(Icons.edit),
-            label: const Text('Edit Profil'),
-            style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout),
-            label: const Text('Keluar'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade700,
-              foregroundColor: Colors.white,
-              minimumSize: const Size.fromHeight(50),
+            InfoItem(
+              icon: Icons.phone,
+              title: 'Telepon',
+              value: _userData!['phone']?.toString() ?? 'Belum diatur',
             ),
+            InfoItem(
+              icon: Icons.home,
+              title: 'Alamat',
+              value: _userData!['address']?.toString() ?? 'Belum diatur',
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildInfoCard(
+          title: 'Informasi Akun',
+          items: [
+            InfoItem(
+              icon: Icons.verified_user,
+              title: 'ID Pengguna (UID)',
+              value: _userData!['uid']?.toString() ?? 'Tidak ada ID', 
+            ),
+            InfoItem(
+              icon: Icons.check_circle,
+              title: 'Role / Peran',
+              value: (_userData!['role']?.toString() ?? 'user').toUpperCase(),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        if (_errorMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
           ),
-        ],
-      ),
-    );
-  }
+        ElevatedButton.icon(
+          onPressed: _navigateToEditProfile,
+          icon: const Icon(Icons.edit),
+          label: const Text('Edit Profil'),
+          style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+        ),
+        const SizedBox(height: 12),
+        ElevatedButton.icon(
+          onPressed: _logout,
+          icon: const Icon(Icons.logout),
+          label: const Text('Keluar'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red.shade700,
+            foregroundColor: Colors.white,
+            minimumSize: const Size.fromHeight(50),
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildInfoCard({required String title, required List<InfoItem> items}) {
     return Card(

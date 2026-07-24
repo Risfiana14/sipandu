@@ -1,10 +1,8 @@
-import 'dart:typed_data'; // Impor untuk Uint8List (menampilkan gambar baru)
+// lib/screens/edit_profile_screen.dart
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore menggantikan PocketBase
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 
 class EditProfileScreen extends StatefulWidget {
-  // Data yang diterima dari ProfileScreen adalah Map dari data Firestore
   final Map<String, dynamic> userData;
   final Function(Map<String, dynamic>) onProfileUpdated;
 
@@ -23,31 +21,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController phoneController;
   late TextEditingController addressController;
 
-  XFile? _selectedImage;
-
   bool _isLoading = false;
   String? _errorMessage;
   final _formKey = GlobalKey<FormState>();
-  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
-    // Mengakses data dari Map yang diterima
     nameController = TextEditingController(text: widget.userData['name'] ?? '');
     phoneController =
         TextEditingController(text: (widget.userData['phone'] ?? '').toString());
     addressController =
         TextEditingController(text: widget.userData['address'] ?? '');
-  }
-
-  Future<void> _pickImage() async {
-    final pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-    if (pickedFile != null) {
-      setState(() {
-        _selectedImage = pickedFile;
-      });
-    }
   }
 
   Future<void> _updateProfile() async {
@@ -59,28 +44,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     });
 
     try {
-      // Mengambil UID dokumen Firestore (mencari fallback field 'uid' atau 'id')
       final userId = widget.userData['uid'] as String? ?? widget.userData['id'] as String?;
 
       if (userId == null || userId.isEmpty) {
         throw Exception("ID Pengguna tidak ditemukan.");
       }
 
-      // Siapkan Map data untuk diperbarui ke Firestore
+      // Hanya memperbarui data teks saja
       final updatedData = <String, dynamic>{
         'name': nameController.text.trim(),
         'phone': phoneController.text.trim(),
         'address': addressController.text.trim(),
+        'avatar': FieldValue.delete(),
       };
-
-      // Jika ada gambar baru yang dipilih, masukkan referensinya (nama berkas).
-      // Catatan: Jika ingin menyederhanakan unggah gambar di server produksi, 
-      // unggah byte terlebih dahulu ke Firebase Storage dan dapatkan URL-nya.
-      if (_selectedImage != null) {
-        updatedData['avatar'] = _selectedImage!.name;
-      } else {
-        updatedData['avatar'] = widget.userData['avatar'];
-      }
 
       // Melakukan pembaruan dokumen langsung pada koleksi 'users' di Firestore
       await FirebaseFirestore.instance
@@ -118,9 +94,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Membaca nilai path/URL avatar dari data pengguna
-    final String? currentAvatarUrl = widget.userData['avatar'] as String?;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Profil'),
@@ -151,27 +124,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ],
                   ),
                 ),
-              GestureDetector(
-                onTap: _pickImage,
-                child: CircleAvatar(
-                  radius: 60,
-                  backgroundColor: Colors.grey.shade200,
-                  child: ClipOval(
-                    child: SizedBox(
-                      width: 120,
-                      height: 120,
-                      child: _buildAvatarImage(currentAvatarUrl),
-                    ),
-                  ),
+              
+              // Tampilan avatar statis (menggunakan inisial huruf depan dari nama)
+              CircleAvatar(
+                radius: 50,
+                backgroundColor: Colors.blue.shade100,
+                child: Text(
+                  nameController.text.isNotEmpty ? nameController.text[0].toUpperCase() : 'P',
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.blue.shade800),
                 ),
               ),
-              const SizedBox(height: 12),
-              const Text('Ketuk gambar untuk mengganti'),
               const SizedBox(height: 24),
               
               TextFormField(
                 controller: nameController,
-                decoration: const InputDecoration(labelText: 'Username'),
+                decoration: const InputDecoration(labelText: 'Username', border: OutlineInputBorder()),
                 validator: (value) => value == null || value.isEmpty
                     ? 'Username tidak boleh kosong'
                     : null,
@@ -179,13 +146,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: phoneController,
-                decoration: const InputDecoration(labelText: 'Phone'),
+                decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder()),
                 keyboardType: TextInputType.phone,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: addressController,
-                decoration: const InputDecoration(labelText: 'Address'),
+                decoration: const InputDecoration(labelText: 'Address', border: OutlineInputBorder()),
                 maxLines: 3,
               ),
               const SizedBox(height: 24),
@@ -205,31 +172,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
       ),
     );
-  }
-
-  Widget _buildAvatarImage(String? currentAvatarUrl) {
-    if (_selectedImage != null) {
-      return FutureBuilder<Uint8List>(
-        future: _selectedImage!.readAsBytes(),
-        builder: (context, snapshot) {
-          if (snapshot.hasData) {
-            return Image.memory(snapshot.data!, fit: BoxFit.cover);
-          }
-          return const Center(child: CircularProgressIndicator());
-        },
-      );
-    } else if (currentAvatarUrl != null && currentAvatarUrl.isNotEmpty) {
-      // Mendukung pemanggilan gambar jika tersimpan dalam skema tautan URL
-      if (currentAvatarUrl.startsWith('http')) {
-        return Image.network(currentAvatarUrl, fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) =>
-                const Icon(Icons.person, size: 60));
-      } else {
-        return const Icon(Icons.person, size: 60, color: Colors.grey);
-      }
-    } else {
-      return const Icon(Icons.person, size: 60, color: Colors.grey);
-    }
   }
 
   @override

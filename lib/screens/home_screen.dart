@@ -4,6 +4,9 @@ import 'package:sipandu/models/report.dart';
 import 'package:sipandu/services/api_service.dart'; // Menggunakan ApiService Firebase
 import 'package:sipandu/screens/report_detail_screen.dart';
 import 'package:sipandu/screens/create_report_screen.dart';
+import 'package:sipandu/screens/report_list_screen.dart'; // Import halaman daftar laporan
+import 'package:sipandu/screens/home_screen.dart';
+import 'package:sipandu/screens/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -16,6 +19,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late Future<List<Report>> _recentReportsFuture;
   final ApiService _apiService = ApiService(); // Instance ApiService Firebase
+  int _currentIndex = 0; // Mengatur tab yang aktif (0 untuk Beranda)
 
   @override
   void initState() {
@@ -25,11 +29,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _loadRecentReports() {
     setState(() {
-      // Mengambil semua data dari Firebase dan dikonversi ke model objek Report
       _recentReportsFuture = _apiService.getAllReports().then((rawList) {
         return rawList.map((mapData) => Report.fromJson(mapData)).toList();
       });
     });
+  }
+
+  // Fungsi pembantu untuk memproses navigasi/filter kategori
+  void _onCategoryTap(String categoryName) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Menampilkan kategori: $categoryName')),
+    );
+    // Jalankan navigasi atau filter data sesuai kebutuhan sistem kamu di sini
   }
 
   @override
@@ -75,7 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: const Color(0xff3b82f6), // Warna biru sesuai UI mockup
+                    color: const Color(0xff3b82f6),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Column(
@@ -126,7 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 // 2. KATEGORI LAPORAN (GRID 3 KOLOM)
                 const Text(
                   'Kategori Laporan',
-                  style: TextStyle(fontSize: 16, fontFamily: 'sans-serif', fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
                 GridView.count(
@@ -157,7 +168,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     TextButton(
                       onPressed: () {
-                        // Aksi ketika tombol Lihat Semua ditekan
+                        // FIX: Navigasi ke ReportListScreen saat "Lihat Semua" dipencet
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const ReportListScreen(),
+                          ),
+                        );
                       },
                       child: const Text('Lihat Semua', style: TextStyle(color: Colors.blue)),
                     ),
@@ -165,7 +181,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 8),
 
-                // Tampilan jika data kosong
                 if (reports.isEmpty)
                   const Center(
                     child: Padding(
@@ -174,15 +189,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   )
                 else
-                  // LIST DAFTAR LAPORAN TERBARU
                   ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: reports.length > 5 ? 5 : reports.length, // Batasi maks 5 item
+                    itemCount: reports.length > 5 ? 5 : reports.length,
                     itemBuilder: (context, index) {
                       final report = reports[index];
-                      
-                      // Cek apakah ada gambar di dalam list images laporan
                       final hasImage = report.images.isNotEmpty && 
                           report.images.first.toLowerCase().startsWith('http');
 
@@ -237,13 +249,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     },
                   ),
+                const SizedBox(height: 30), 
               ],
             ),
           );
         },
       ),
+
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xff4caf50), // Warna hijau tombol laporan sesuai mockup
+        backgroundColor: const Color(0xff4caf50), 
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), 
         onPressed: () async {
           final result = await Navigator.of(context).push(
             MaterialPageRoute(
@@ -252,12 +269,102 @@ class _HomeScreenState extends State<HomeScreen> {
           );
           if (result == true) _loadRecentReports();
         },
-        child: const Icon(Icons.add, color: Colors.white, size: 28),
+        child: const Icon(Icons.add, color: Colors.white, size: 32),
+      ),
+
+      bottomNavigationBar: BottomAppBar(
+        shape: const CircularNotchedRectangle(), 
+        notchMargin: 8.0,
+        color: Colors.white,
+        child: SizedBox(
+          height: 60,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              // Tombol Beranda (Kiri)
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _currentIndex = 0;
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.home,
+                        color: _currentIndex == 0 ? Colors.blue : Colors.grey,
+                      ),
+                      Text(
+                        'Beranda',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _currentIndex == 0 ? Colors.blue : Colors.grey,
+                          fontWeight: _currentIndex == 0 ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Spacer Tengah
+              Padding(
+                padding: const EdgeInsets.only(top: 24.0),
+                child: Text(
+                  'Laporan',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+
+              // Tombol Profil (Kanan)
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _currentIndex = 2;
+                  });
+                  // FIX: Arahkan navigasi ke ProfileScreen yang baru saja kamu buat kodenya
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ProfileScreen(),
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.person,
+                        color: _currentIndex == 2 ? Colors.blue : Colors.grey,
+                      ),
+                      Text(
+                        'Profil',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _currentIndex == 2 ? Colors.blue : Colors.grey,
+                          fontWeight: _currentIndex == 2 ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  // Helper Widget untuk membuat Item Kategori dengan background bundar & bayangan halus
+  // Helper Widget Kategori Laporan dengan pembungkus InkWell aktif
   Widget _buildCategoryItem(IconData icon, String label, Color bgColor, Color iconColor) {
     return Container(
       decoration: BoxDecoration(
@@ -271,28 +378,33 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: bgColor,
-              shape: BoxShape.circle,
+      // FIX: Dibungkus dengan InkWell + BorderRadius agar efek gelombang klik rapi dan bisa dipencet
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _onCategoryTap(label),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: bgColor,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: iconColor, size: 24),
             ),
-            child: Icon(icon, color: iconColor, size: 24),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12, 
-              fontWeight: FontWeight.w600, 
-              color: Colors.black87
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12, 
+                fontWeight: FontWeight.w600, 
+                color: Colors.black87
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
