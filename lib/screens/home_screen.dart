@@ -69,8 +69,6 @@ class _HomeScreenState extends State<HomeScreen> {
           if (snapshot.hasError) {
             return Center(child: Text('Terjadi kesalahan: ${snapshot.error}'));
           }
-          
-          final reports = snapshot.data ?? [];
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -153,114 +151,23 @@ class _HomeScreenState extends State<HomeScreen> {
                     _buildCategoryItem(Icons.more_horiz, 'Lainnya', Colors.purple[50]!, Colors.purple),
                   ],
                 ),
-                const SizedBox(height: 24),
-
-                // 3. SEKSI LAPORAN TERBARU
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Laporan Terbaru',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    TextButton(
-                      onPressed: () async {
-                        final result = await Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const ReportListScreen(),
-                          ),
-                        );
-                        _loadRecentReports();
-                      },
-                      child: const Text('Lihat Semua', style: TextStyle(color: Colors.blue)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                if (reports.isEmpty)
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 20),
-                      child: Text('Belum ada laporan masuk.'),
-                    ),
-                  )
-                else
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: reports.length > 5 ? 5 : reports.length,
-                    itemBuilder: (context, index) {
-                      final report = reports[index];
-
-                      return Card(
-                        elevation: 1,
-                        margin: const EdgeInsets.symmetric(vertical: 6),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          // leading: ClipRRect(...) TELAH DIHAPUS SUPAYA BERSIH TANPA RUANG KOTAK GAMBAR
-                          title: Text(
-                            report.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(
-                            report.description,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: Text(
-                            report.formattedDate,
-                            style: const TextStyle(fontSize: 11, color: Colors.grey),
-                          ),
-                          onTap: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => ReportDetailScreen(reportId: report.id),
-                              ),
-                            );
-                            _loadRecentReports();
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                const SizedBox(height: 30), 
+                const SizedBox(height: 20), 
               ],
             ),
           );
         },
       ),
 
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xff4caf50), 
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), 
-        onPressed: () async {
-          final result = await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => CreateReportScreen(userData: widget.userData),
-            ),
-          );
-          if (result == true) _loadRecentReports();
-        },
-        child: const Icon(Icons.add, color: Colors.white, size: 32),
-      ),
-
+      // Bottom Navigation Bar
       bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(), 
-        notchMargin: 8.0,
+        elevation: 8,
         color: Colors.white,
         child: SizedBox(
           height: 60,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
+              // 1. Tombol Beranda
               InkWell(
                 onTap: () {
                   setState(() {
@@ -268,7 +175,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   });
                 },
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -288,17 +195,86 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.only(top: 24.0),
-                child: Text(
-                  'Laporan',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
+
+              // 2. Tombol Laporan (Untuk melihat list semua laporan terbaru)
+              InkWell(
+                onTap: () async {
+                  setState(() {
+                    _currentIndex = 1;
+                  });
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ReportListScreen(),
+                    ),
+                  );
+                  setState(() {
+                    _currentIndex = 0;
+                  });
+                  _loadRecentReports();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.assignment,
+                        color: _currentIndex == 1 ? Colors.blue : Colors.grey,
+                      ),
+                      Text(
+                        'Laporan',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _currentIndex == 1 ? Colors.blue : Colors.grey[600],
+                          fontWeight: _currentIndex == 1 ? FontWeight.bold : FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
+
+              // 3. Tombol Tambah
+              InkWell(
+                onTap: () async {
+                  final result = await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => CreateReportScreen(userData: widget.userData),
+                    ),
+                  );
+                  if (result == true) _loadRecentReports();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xff4caf50),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.add,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Tambah',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // 4. Tombol Profil
               InkWell(
                 onTap: () {
                   setState(() {
@@ -311,7 +287,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
