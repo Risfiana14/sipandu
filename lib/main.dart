@@ -9,11 +9,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
-  // 1. Wajib ditambahkan agar inisialisasi asinkronus berjalan lancar
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    // 2. Inisialisasi Firebase dengan menyertakan opsi kredensial Web Chrome
+    // Inisialisasi Firebase dengan opsi kredensial proyek
     await Firebase.initializeApp(
       options: const FirebaseOptions(
         apiKey: "AIzaSyBkAm-6OZBPtRnNfc-SfMHtRYmItUcZ1jo",
@@ -48,7 +47,6 @@ class SipanduApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      // 3. Menggunakan StreamBuilder untuk mengecek status login pengguna secara realtime
       home: const AuthWrapper(),
     );
   }
@@ -59,33 +57,54 @@ class AuthWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final AuthService authService = AuthService();
+    // Dipastikan instansiasi service dipanggil dengan benar jika dibutuhkan nanti
+    final AuthService authService = AuthService(); 
 
     return StreamBuilder<User?>(
-      // Memantau perubahan status login dari Firebase Auth
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // Jika sedang loading koneksi ke Firebase Auth
+        // 1. Tangani error pada stream utama auth
+        if (snapshot.hasError) {
+          return const Scaffold(
+            body: Center(child: Text("Terjadi kesalahan pada sistem Autentikasi.")),
+          );
+        }
+
+        // 2. Jika sedang loading koneksi ke Firebase Auth
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        // Jika user sudah login sebelumnya
+        // 3. Jika user sudah login sebelumnya
         if (snapshot.hasData && snapshot.data != null) {
           User user = snapshot.data!;
           
-          // Ambil data detail role user dari Firestore untuk menentukan halaman tujuan
           return FutureBuilder<DocumentSnapshot>(
             future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
             builder: (context, userSnapshot) {
+              // PERBAIKAN: Tangani error jika Firestore gagal mengambil data (Permission Denied, dll)
+              if (userSnapshot.hasError) {
+                print("Firestore Error: ${userSnapshot.error}");
+                return Scaffold(
+                  body: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text("Gagal memuat data pengguna: ${userSnapshot.error}"),
+                    ),
+                  ),
+                );
+              }
+
+              // Jika data dokumen dari database masih dimuat
               if (userSnapshot.connectionState == ConnectionState.waiting) {
                 return const Scaffold(
                   body: Center(child: CircularProgressIndicator()),
                 );
               }
 
+              // Jika data sukses didapatkan dan dokumennya terdaftar di Firestore
               if (userSnapshot.hasData && userSnapshot.data!.exists) {
                 Map<String, dynamic> userData = userSnapshot.data!.data() as Map<String, dynamic>;
                 String role = userData['role'] ?? 'user';
@@ -97,13 +116,13 @@ class AuthWrapper extends StatelessWidget {
                 }
               }
 
-              // Jika data dokumen di Firestore tidak ada, fallback ke Login
+              // Jika akun terautentikasi di Auth tapi data dokumen di Firestore kosong/dihapus
               return const LoginScreen();
             },
           );
         }
 
-        // Jika belum login, arahkan ke LoginScreen
+        // Jika belum login, arahkan langsung ke LoginScreen
         return const LoginScreen();
       },
     );
