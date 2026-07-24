@@ -60,50 +60,6 @@ class _ReportListScreenState extends State<ReportListScreen> {
     }
   }
 
-  Widget _buildThumbnail(List<String> images) {
-    if (images.isEmpty) {
-      return Container(
-        width: 80,
-        height: 80,
-        decoration: BoxDecoration(
-          color: Colors.grey[200],
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(Icons.image_not_supported, color: Colors.grey[400]),
-      );
-    }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Image.network(
-        images.first,
-        width: 80,
-        height: 80,
-        fit: BoxFit.cover,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return Center(
-            child: CircularProgressIndicator(
-              value: loadingProgress.expectedTotalBytes != null
-                  ? loadingProgress.cumulativeBytesLoaded /
-                      loadingProgress.expectedTotalBytes!
-                  : null,
-            ),
-          );
-        },
-        errorBuilder: (_, __, ___) => Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            color: Colors.grey[200],
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(Icons.broken_image, color: Colors.grey[400]),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -193,12 +149,11 @@ class _ReportListScreenState extends State<ReportListScreen> {
                       }
                     },
                     child: Padding(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(16), // Memberi ruang padding yang merata
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildThumbnail(report.images),
-                          const SizedBox(width: 12),
+                          // KOTAK THUMBNAIL SUDAH DIHAPUS DARI SINI
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,7 +164,7 @@ class _ReportListScreenState extends State<ReportListScreen> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: _getStatusColor(report.status).withAlpha(51), // Menggunakan dengan .withAlpha()
+                                        color: _getStatusColor(report.status).withAlpha(51),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Text(

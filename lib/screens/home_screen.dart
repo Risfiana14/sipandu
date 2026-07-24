@@ -1,11 +1,10 @@
 // lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:sipandu/models/report.dart';
-import 'package:sipandu/services/api_service.dart'; // Menggunakan ApiService Firebase
+import 'package:sipandu/services/api_service.dart';
 import 'package:sipandu/screens/report_detail_screen.dart';
 import 'package:sipandu/screens/create_report_screen.dart';
-import 'package:sipandu/screens/report_list_screen.dart'; // Import halaman daftar laporan
-import 'package:sipandu/screens/home_screen.dart';
+import 'package:sipandu/screens/report_list_screen.dart';
 import 'package:sipandu/screens/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -18,8 +17,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late Future<List<Report>> _recentReportsFuture;
-  final ApiService _apiService = ApiService(); // Instance ApiService Firebase
-  int _currentIndex = 0; // Mengatur tab yang aktif (0 untuk Beranda)
+  final ApiService _apiService = ApiService();
+  int _currentIndex = 0;
 
   @override
   void initState() {
@@ -35,12 +34,10 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // Fungsi pembantu untuk memproses navigasi/filter kategori
   void _onCategoryTap(String categoryName) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Menampilkan kategori: $categoryName')),
     );
-    // Jalankan navigasi atau filter data sesuai kebutuhan sistem kamu di sini
   }
 
   @override
@@ -167,13 +164,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     TextButton(
-                      onPressed: () {
-                        // FIX: Navigasi ke ReportListScreen saat "Lihat Semua" dipencet
-                        Navigator.of(context).push(
+                      onPressed: () async {
+                        final result = await Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const ReportListScreen(),
                           ),
                         );
+                        _loadRecentReports();
                       },
                       child: const Text('Lihat Semua', style: TextStyle(color: Colors.blue)),
                     ),
@@ -195,8 +192,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     itemCount: reports.length > 5 ? 5 : reports.length,
                     itemBuilder: (context, index) {
                       final report = reports[index];
-                      final hasImage = report.images.isNotEmpty && 
-                          report.images.first.toLowerCase().startsWith('http');
 
                       return Card(
                         elevation: 1,
@@ -205,24 +200,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           borderRadius: BorderRadius.circular(12)
                         ),
                         child: ListTile(
-                          contentPadding: const EdgeInsets.all(12),
-                          leading: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              width: 60,
-                              height: 60,
-                              color: Colors.grey[200],
-                              child: hasImage
-                                  ? Image.network(
-                                      report.images.first,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return const Icon(Icons.broken_image, color: Colors.grey);
-                                      },
-                                    )
-                                  : const Icon(Icons.image, color: Colors.grey),
-                            ),
-                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          // leading: ClipRRect(...) TELAH DIHAPUS SUPAYA BERSIH TANPA RUANG KOTAK GAMBAR
                           title: Text(
                             report.title,
                             maxLines: 1,
@@ -238,12 +217,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             report.formattedDate,
                             style: const TextStyle(fontSize: 11, color: Colors.grey),
                           ),
-                          onTap: () {
-                            Navigator.of(context).push(
+                          onTap: () async {
+                            await Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => ReportDetailScreen(reportId: report.id),
                               ),
                             );
+                            _loadRecentReports();
                           },
                         ),
                       );
@@ -281,7 +261,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              // Tombol Beranda (Kiri)
               InkWell(
                 onTap: () {
                   setState(() {
@@ -309,8 +288,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-
-              // Spacer Tengah
               Padding(
                 padding: const EdgeInsets.only(top: 24.0),
                 child: Text(
@@ -322,14 +299,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-
-              // Tombol Profil (Kanan)
               InkWell(
                 onTap: () {
                   setState(() {
                     _currentIndex = 2;
                   });
-                  // FIX: Arahkan navigasi ke ProfileScreen yang baru saja kamu buat kodenya
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const ProfileScreen(),
@@ -364,7 +338,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Helper Widget Kategori Laporan dengan pembungkus InkWell aktif
   Widget _buildCategoryItem(IconData icon, String label, Color bgColor, Color iconColor) {
     return Container(
       decoration: BoxDecoration(
@@ -378,7 +351,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      // FIX: Dibungkus dengan InkWell + BorderRadius agar efek gelombang klik rapi dan bisa dipencet
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () => _onCategoryTap(label),

@@ -1,11 +1,9 @@
-import 'dart:convert';
-import 'dart:typed_data';
+// lib/screens/create_report_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Menggunakan Firestore langsung
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CreateReportScreen extends StatefulWidget {
   final String? initialCategory;
@@ -29,12 +27,10 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
   LatLng _selectedLocation = LatLng(-7.2575, 112.7521); // Default: Surabaya
   String? _selectedCategory;
-  final List<XFile> _selectedImages = [];
   bool _isLoading = false;
   String? _errorMessage;
 
-  final ImagePicker _picker = ImagePicker();
-  final FirebaseFirestore _db = FirebaseFirestore.instance; // Instance Firestore untuk simpan data
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   final List<String> _categories = [
     'Jalan',
@@ -66,35 +62,8 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     _mapController.move(_selectedLocation, _mapController.zoom);
   }
 
-  Future<void> _pickImages() async {
-    try {
-      final List<XFile> pickedImages = await _picker.pickMultiImage(
-        imageQuality: 70,
-        maxWidth: 1024,
-      );
-      if (pickedImages.isNotEmpty) {
-        setState(() => _selectedImages.addAll(pickedImages));
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = 'Error memilih gambar: $e';
-      });
-    }
-  }
-
-  void _removeImage(int index) {
-    setState(() => _selectedImages.removeAt(index));
-  }
-
   Future<void> _submitReport() async {
     if (!_formKey.currentState!.validate()) return;
-
-    if (_selectedImages.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Silakan tambahkan minimal satu gambar')));
-      return;
-    }
 
     setState(() {
       _isLoading = true;
@@ -102,16 +71,15 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     });
 
     try {
-      // 1. Ambil Uid Pengguna dari properti Firestore atau Firebase Auth fallback
       final userId = widget.userData['uid'] as String? ?? 
-                     widget.userData['id'] as String? ?? 
-                     FirebaseAuth.instance.currentUser?.uid;
+                    widget.userData['id'] as String? ?? 
+                    FirebaseAuth.instance.currentUser?.uid;
 
       if (userId == null || userId.isEmpty) {
         throw Exception("ID Pengguna tidak ditemukan. Silakan coba login kembali.");
       }
 
-      // 2. Kirim data laporan langsung ke Firebase Firestore
+      // Kirim data laporan langsung ke Firebase Firestore tanpa array gambar
       await _db.collection('laporan_masyarakat').add({
         'user_id': userId,
         'judul': _titleController.text.trim(),
@@ -122,8 +90,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
           'latitude': _selectedLocation.latitude,
           'longitude': _selectedLocation.longitude,
         },
-        'gambar_list': _selectedImages.map((img) => img.name).toList(),
-        'createdAt': FieldValue.serverTimestamp(), // Timestamp server Firebase
+        'createdAt': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
@@ -133,7 +100,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(true);
       
     } catch (e) {
       if (!mounted) return;
@@ -269,20 +236,6 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
             Center(
                 child: Text('Ketuk pada peta untuk memilih lokasi',
                     style: Theme.of(context).textTheme.bodySmall)),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Lampiran Gambar',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                IconButton(
-                    onPressed: _pickImages,
-                    icon: const Icon(Icons.add_photo_alternate),
-                    tooltip: 'Tambah Gambar dari Galeri'),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _buildImagePreview(),
             const SizedBox(height: 32),
             SizedBox(
               height: 50,
@@ -299,61 +252,6 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildImagePreview() {
-    if (_selectedImages.isEmpty) {
-      return Container(
-        height: 100,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Center(child: Text('Belum ada gambar yang dipilih.')),
-      );
-    }
-
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _selectedImages.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8),
-      itemBuilder: (context, index) {
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            FutureBuilder<Uint8List>(
-              future: _selectedImages[index].readAsBytes(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.done &&
-                    snapshot.hasData) {
-                  return ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.memory(snapshot.data!, fit: BoxFit.cover));
-                }
-                return const Center(child: CircularProgressIndicator());
-              },
-            ),
-            Positioned(
-              top: 4,
-              right: 4,
-              child: InkWell(
-                onTap: () => _removeImage(index),
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
-                      shape: BoxShape.circle),
-                  child: const Icon(Icons.close, color: Colors.white, size: 18),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 }

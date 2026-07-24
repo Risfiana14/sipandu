@@ -1,3 +1,4 @@
+// lib/screens/report_detail_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:sipandu/models/report.dart';
@@ -90,29 +91,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     }
   }
 
-  Widget _buildImage(String imageUrl) {
-    return Image.network(
-      imageUrl,
-      fit: BoxFit.cover,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return Center(
-          child: CircularProgressIndicator(
-            value: loadingProgress.expectedTotalBytes != null
-                ? loadingProgress.cumulativeBytesLoaded /
-                    loadingProgress.expectedTotalBytes!
-                : null,
-          ),
-        );
-      },
-      errorBuilder: (context, error, stackTrace) {
-        return const Center(
-          child: Icon(Icons.broken_image, size: 40, color: Colors.grey),
-        );
-      },
-    );
-  }
-
   @override
   void dispose() {
     _mapController.dispose();
@@ -188,7 +166,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
 
                 Text(
                   report.title,
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 24, fontStyle: FontStyle.normal, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Container(
@@ -210,36 +188,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(report.description),
-                const SizedBox(height: 24),
-
-                const Text(
-                  'Gambar',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 200,
-                  child: report.images.isEmpty
-                      ? const Center(child: Text('Tidak ada gambar tersedia'))
-                      : ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: report.images.length,
-                          itemBuilder: (context, index) {
-                            return Container(
-                              width: 150,
-                              margin: const EdgeInsets.only(right: 8),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                color: Colors.grey[200],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: _buildImage(report.images[index]),
-                              ),
-                            );
-                          },
-                        ),
-                ),
                 const SizedBox(height: 24),
 
                 const Text(
