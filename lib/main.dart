@@ -1,6 +1,9 @@
 // lib/main.dart
+
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart'; 
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+
 import 'package:sipandu/screens/login_screen.dart';
 import 'package:sipandu/screens/home_screen.dart';
 import 'package:sipandu/screens/dashboard_admin_screen.dart';
@@ -12,17 +15,10 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    // Inisialisasi Firebase dengan opsi kredensial proyek
+    // Inisialisasi Firebase menggunakan konfigurasi
+    // yang dibuat oleh FlutterFire CLI
     await Firebase.initializeApp(
-      options: const FirebaseOptions(
-        apiKey: "AIzaSyBkAm-6OZBPtRnNfc-SfMHtRYmItUcZ1jo",
-        authDomain: "sipandu-ea21b.firebaseapp.com",
-        projectId: "sipandu-ea21b",
-        storageBucket: "sipandu-ea21b.firebasestorage.app",
-        messagingSenderId: "741436438006",
-        appId: "1:741436438006:web:3b15655bf43dc4b4be83d7",
-        measurementId: "G-FZHD4K4PZD",
-      ),
+      options: DefaultFirebaseOptions.currentPlatform,
     );
   } catch (e) {
     print("Firebase Initialization Error: $e");
@@ -58,7 +54,7 @@ class AuthWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Dipastikan instansiasi service dipanggil dengan benar jika dibutuhkan nanti
-    final AuthService authService = AuthService(); 
+    final AuthService authService = AuthService();
 
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
@@ -66,47 +62,66 @@ class AuthWrapper extends StatelessWidget {
         // 1. Tangani error pada stream utama auth
         if (snapshot.hasError) {
           return const Scaffold(
-            body: Center(child: Text("Terjadi kesalahan pada sistem Autentikasi.")),
+            body: Center(
+              child: Text(
+                "Terjadi kesalahan pada sistem Autentikasi.",
+              ),
+            ),
           );
         }
 
         // 2. Jika sedang loading koneksi ke Firebase Auth
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
           );
         }
 
         // 3. Jika user sudah login sebelumnya
         if (snapshot.hasData && snapshot.data != null) {
           User user = snapshot.data!;
-          
+
           return FutureBuilder<DocumentSnapshot>(
-            future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
+            future: FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .get(),
             builder: (context, userSnapshot) {
-              // PERBAIKAN: Tangani error jika Firestore gagal mengambil data (Permission Denied, dll)
+              // PERBAIKAN: Tangani error jika Firestore gagal mengambil data
               if (userSnapshot.hasError) {
                 print("Firestore Error: ${userSnapshot.error}");
+
                 return Scaffold(
                   body: Center(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
-                      child: Text("Gagal memuat data pengguna: ${userSnapshot.error}"),
+                      child: Text(
+                        "Gagal memuat data pengguna: ${userSnapshot.error}",
+                      ),
                     ),
                   ),
                 );
               }
 
               // Jika data dokumen dari database masih dimuat
-              if (userSnapshot.connectionState == ConnectionState.waiting) {
+              if (userSnapshot.connectionState ==
+                  ConnectionState.waiting) {
                 return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
+                  body: Center(
+                    child: CircularProgressIndicator(),
+                  ),
                 );
               }
 
               // Jika data sukses didapatkan dan dokumennya terdaftar di Firestore
-              if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                Map<String, dynamic> userData = userSnapshot.data!.data() as Map<String, dynamic>;
+              if (userSnapshot.hasData &&
+                  userSnapshot.data!.exists) {
+                Map<String, dynamic> userData =
+                    userSnapshot.data!.data()
+                        as Map<String, dynamic>;
+
                 String role = userData['role'] ?? 'user';
 
                 if (role == 'admin') {
@@ -116,7 +131,8 @@ class AuthWrapper extends StatelessWidget {
                 }
               }
 
-              // Jika akun terautentikasi di Auth tapi data dokumen di Firestore kosong/dihapus
+              // Jika akun terautentikasi di Auth tapi data dokumen
+              // di Firestore kosong/dihapus
               return const LoginScreen();
             },
           );
