@@ -198,30 +198,6 @@ class _AdminReportsViewState extends State<AdminReportsView> {
     );
   }
 
-  Widget _buildThumbnail(List<String> images) {
-    if (images.isEmpty) {
-      return Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-              color: Colors.grey[200], borderRadius: BorderRadius.circular(8)),
-          child: Icon(Icons.image_not_supported, color: Colors.grey[400]));
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Image.network(
-        images.first,
-        width: 80,
-        height: 80,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => Container(
-            width: 80,
-            height: 80,
-            color: Colors.grey[200],
-            child: Icon(Icons.broken_image, color: Colors.grey[400])),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -273,33 +249,59 @@ class _AdminReportsViewState extends State<AdminReportsView> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildThumbnail(report.images),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(report.title,
-                                        style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis),
-                                    const SizedBox(height: 4),
-                                    Text('Oleh: ${report.reporter?.name ?? report.userId}',
-                                        style: const TextStyle(
-                                            fontSize: 13, color: Colors.grey)),
-                                    const SizedBox(height: 4),
-                                    Text(report.description,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis),
-                                  ],
-                                ),
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    report.title,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+
+                                  const SizedBox(height: 6),
+
+                                  // EMAIL PELAPOR
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.email_outlined,
+                                        size: 17,
+                                        color: Colors.grey,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          report.reporter?.email ??
+                                              'Email tidak tersedia',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.grey,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+
+                                  const SizedBox(height: 6),
+
+                                  Text(
+                                    report.description,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
+                        ),
                           const SizedBox(height: 12),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
